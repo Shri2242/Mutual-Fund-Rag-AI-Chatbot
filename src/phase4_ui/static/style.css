@@ -117,12 +117,30 @@ body {
   gap: 20px;
 }
 
-.icon-btn {
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: color 0.2s;
-}
+.icon-btn { color: var(--text-secondary); cursor: pointer; transition: color 0.2s; }
 .icon-btn:hover { color: var(--text-primary); }
+
+.new-chat-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  border-radius: 20px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.01em;
+}
+.new-chat-btn:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+.new-chat-btn svg { flex-shrink: 0; }
 
 .avatar img {
   width: 32px; height: 32px;

@@ -17,6 +17,8 @@ sentence-transformers>=2.7.0  # Local fallback embedding model (all-MiniLM-L6-v2
 
 # ─── Phase 4: Query Processing ────────────────────────────────────────────────
 anthropic>=0.26.0         # Claude Sonnet for intent classification + generation
+groq>=0.9.0              # Llama-3 on Groq for facts-only synthesis
+rank_bm25>=0.2.2          # Sparse retrieval fallback
 rapidfuzz>=3.9.0          # Fuzzy scheme name matching
 
 # ─── Phase 5: Response Generation ─────────────────────────────────────────────

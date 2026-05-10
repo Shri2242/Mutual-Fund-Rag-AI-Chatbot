@@ -41,7 +41,7 @@ from src.phase3_reasoning.orchestrator import Orchestrator, PIIDetector
 BASE_DIR      = Path(__file__).parent.parent.parent
 MANIFEST_PATH = BASE_DIR / "src" / "phase0_corpus_registry" / "corpus_manifest.json"
 REFRESH_LOG   = BASE_DIR / "data" / "index" / "refresh_log.jsonl"
-STATIC_DIR    = BASE_DIR / "src" / "phase6_ui"
+STATIC_DIR    = BASE_DIR / "src" / "phase4_ui" / "static"
 LOG_DIR       = BASE_DIR / "data" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 ACCESS_LOG    = LOG_DIR / "access_log.jsonl"
@@ -68,6 +68,7 @@ app.add_middleware(
 # ── Pydantic Models ───────────────────────────────────────────────────────────
 class AskRequest(BaseModel):
     query: str
+    history: list[dict] = []   # list of {"role": "user"|"assistant", "content": "..."}
 
 class AskResponse(BaseModel):
     request_id: str
@@ -194,8 +195,8 @@ async def ask(body: AskRequest, request: Request):
     is_pii = PIIDetector.contains_pii(query)
     intent = "pii_blocked" if is_pii else IntentClassifier.classify(query)
 
-    # Call Phase 3 Orchestrator
-    raw_answer = _orchestrator.ask(query)
+    # Call Phase 3 Orchestrator with history
+    raw_answer = _orchestrator.ask(query, history=body.history)
 
     # Parse structured parts
     parsed     = _parse_answer(raw_answer)

@@ -24,6 +24,26 @@ const sourcesList   = document.getElementById('sources-list');
 // ── State ─────────────────────────────────────────────────────────────────────
 let inFlight = false;
 let lastFullAnswer = '';
+let chatHistory = []; // Track context: [{role, content}, ...]
+
+// ── New Chat ───────────────────────────────────────────────────────────────────
+const newChatBtn = document.getElementById('new-chat-btn');
+if (newChatBtn) {
+  newChatBtn.addEventListener('click', () => {
+    chatHistory = [];
+    lastFullAnswer = '';
+    conversation.innerHTML = '';
+    queryInput.value = '';
+    autoResize();
+    sendBtn.disabled = true;
+    queryInput.focus();
+    // Animate reset
+    newChatBtn.textContent = 'Cleared!';
+    setTimeout(() => {
+      newChatBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> New Chat`;
+    }, 1200);
+  });
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function setLoading(val) {
@@ -73,56 +93,61 @@ function addUserBubble(text) {
 }
 
 // ── Render answer from API response ──────────────────────────────────────────
-function renderAnswer(data) {
-  const { answer, answer_body, source_url, last_updated, intent, post_check_passed } = data;
-
-  lastFullAnswer = answer;
-
-  // Body text
-  answerBody.textContent = answer_body || answer;
-
-  // Source link (exactly one URL or none — enforced by backend)
-  answerSource.innerHTML = source_url ? buildSourceLink(source_url) : '';
-
-  // Date footer
-  answerDate.textContent = last_updated
-    ? 'Last updated from sources: ' + last_updated
-    : '';
-
-  // Intent tag
+function addAIBubble(data) {
+  const { answer, answer_body, source_url, last_updated, intent } = data;
+  
+  // Clone the template card or create from scratch
+  const card = document.createElement('section');
+  card.className = 'answer-card';
+  
   const { label, cls } = getIntentLabel(intent);
-  intentTag.textContent = label;
-  intentTag.className = 'intent-tag show ' + cls;
-
-  // Card variant styling
-  answerCard.className = 'answer-card';
-  if (intent === 'pii_blocked') answerCard.classList.add('pii');
-  if (['advisory', 'comparison', 'prediction'].includes(intent)) answerCard.classList.add('refusal');
-
-  // Footer visibility
+  
   const hasFooter = source_url || last_updated;
-  document.getElementById('answer-footer').style.display = hasFooter ? '' : 'none';
+  const footerHtml = hasFooter ? `
+    <footer class="answer-footer">
+      <div class="answer-source">${source_url ? buildSourceLink(source_url) : ''}</div>
+      <div class="answer-date">${last_updated ? 'Last updated: ' + last_updated : ''}</div>
+    </footer>
+  ` : '';
 
-  // Show card
-  answerCard.classList.remove('hidden');
+  card.innerHTML = `
+    <div class="answer-header">
+      <div class="answer-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <span class="answer-label">AI Assistant</span>
+      <div class="intent-tag show ${cls}" style="margin-left: auto; margin-right: 12px; position: static;">${label}</div>
+    </div>
+    <div class="answer-body">${(answer_body || answer).replace(/\n/g, '<br>')}</div>
+    ${footerHtml}
+  `;
+
+  if (intent === 'pii_blocked') card.classList.add('pii');
+  if (['advisory', 'comparison', 'prediction'].includes(intent)) card.classList.add('refusal');
+
+  conversation.appendChild(card);
   scrollToBottom();
+}
+
+function renderAnswer(data) {
+  // Backwards compat: just call the append logic
+  addAIBubble(data);
+  lastFullAnswer = data.answer;
 }
 
 // ── Main ask function ─────────────────────────────────────────────────────────
 async function ask(query) {
   if (inFlight || !query.trim()) return;
 
-  // Hide welcome section after first question
-  welcomeSection.style.display = 'none';
-
   addUserBubble(query);
+  chatHistory.push({ role: 'user', content: query });
   setLoading(true);
 
   try {
     const res = await fetch(API_BASE + '/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, history: chatHistory }),
     });
 
     if (!res.ok) {
@@ -131,13 +156,22 @@ async function ask(query) {
     }
 
     const data = await res.json();
+    chatHistory.push({ role: 'assistant', content: data.answer });
     renderAnswer(data);
   } catch (err) {
-    answerBody.textContent = 'Something went wrong: ' + err.message + '. Please try again.';
-    answerSource.innerHTML = '';
-    answerDate.textContent = '';
-    intentTag.className = 'intent-tag';
-    answerCard.classList.remove('hidden');
+    // Append an error bubble instead of writing to the (hidden) static card
+    const errCard = document.createElement('section');
+    errCard.className = 'answer-card refusal';
+    errCard.innerHTML = `
+      <div class="answer-header">
+        <div class="answer-icon" style="background:#eb5b3c">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <span class="answer-label">Error</span>
+      </div>
+      <div class="answer-body">Something went wrong: ${err.message}. Please try again.</div>
+    `;
+    conversation.appendChild(errCard);
     scrollToBottom();
   } finally {
     setLoading(false);

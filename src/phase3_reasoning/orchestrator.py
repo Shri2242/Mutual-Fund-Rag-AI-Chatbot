@@ -64,7 +64,7 @@ BANNED_TOKENS = [
 GROQ_MODEL         = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_TEMPERATURE   = float(os.environ.get("GROQ_TEMPERATURE", "0.1"))
 GROQ_MAX_TOKENS    = int(os.environ.get("GROQ_MAX_TOKENS", "512"))
-CONFIDENCE_THRESHOLD = 2   # min keyword hits to treat as a confident retrieval
+CONFIDENCE_THRESHOLD = 1   # min keyword hits to treat as a confident retrieval
 
 
 # ── PII Detector ──────────────────────────────────────────────────────────────
@@ -97,8 +97,38 @@ class IntentClassifier:
 
 
 # ── Mock BM25-style Retriever ─────────────────────────────────────────────────
+# Alias map: user-facing names -> URL slug keywords (to fix Groww naming mismatches)
+# e.g. Groww stores 'hdfc-equity-fund' URL but scheme name is 'HDFC Flexi Cap'
+FUND_ALIAS_MAP = {
+    # slug keywords          -> canonical search tokens to inject
+    "hdfc-equity-fund":      ["equity", "flexi", "flexicap", "flexi cap"],
+    "hdfc-mid-cap-fund":     ["mid cap", "midcap", "mid-cap", "opportunities"],
+    "hdfc-focused-fund":     ["focused"],
+    "hdfc-elss":             ["elss", "tax saver", "tax-saver", "lock"],
+    "hdfc-large-cap-fund":   ["large cap", "largecap", "large-cap"],
+}
+
+# Reverse alias: user query words -> which chunk to prefer
+QUERY_ALIAS_MAP = {
+    "equity fund":       "mutual-funds_hdfc-equity-fund-direct-growth",
+    "equity":            "mutual-funds_hdfc-equity-fund-direct-growth",
+    "flexi cap":         "mutual-funds_hdfc-equity-fund-direct-growth",
+    "flexicap":          "mutual-funds_hdfc-equity-fund-direct-growth",
+    "mid cap":           "mutual-funds_hdfc-mid-cap-fund-direct-growth",
+    "midcap":            "mutual-funds_hdfc-mid-cap-fund-direct-growth",
+    "mid-cap":           "mutual-funds_hdfc-mid-cap-fund-direct-growth",
+    "opportunities":     "mutual-funds_hdfc-mid-cap-fund-direct-growth",
+    "focused":           "mutual-funds_hdfc-focused-fund-direct-growth",
+    "elss":              "mutual-funds_hdfc-elss-tax-saver-fund-direct-plan-growth",
+    "tax saver":         "mutual-funds_hdfc-elss-tax-saver-fund-direct-plan-growth",
+    "tax-saver":         "mutual-funds_hdfc-elss-tax-saver-fund-direct-plan-growth",
+    "large cap":         "mutual-funds_hdfc-large-cap-fund-direct-growth",
+    "largecap":          "mutual-funds_hdfc-large-cap-fund-direct-growth",
+    "large-cap":         "mutual-funds_hdfc-large-cap-fund-direct-growth",
+}
+
 class MockRetriever:
-    """Keyword retriever standing in for ChromaDB until Windows DLL is resolved."""
+    """Keyword retriever with alias resolution for Groww fund name mismatches."""
 
     def __init__(self):
         self.chunks: list = []
@@ -109,11 +139,39 @@ class MockRetriever:
                     if line:
                         self.chunks.append(json.loads(line))
 
+    def _get_searchable(self, chunk: dict) -> str:
+        """Build a rich searchable string including chunk_id slug and metadata."""
+        slug = chunk.get("chunk_id", "").replace("-", " ").replace("_", " ")
+        scheme = chunk.get("metadata", {}).get("scheme", "")
+        text = chunk.get("text", "")
+        # Inject aliases for this chunk's slug
+        alias_tokens = ""
+        for slug_key, tokens in FUND_ALIAS_MAP.items():
+            if slug_key in chunk.get("chunk_id", ""):
+                alias_tokens = " ".join(tokens)
+                break
+        return f"{slug} {scheme} {alias_tokens} {text}".lower()
+
     def retrieve(self, query: str):
-        q_terms = query.lower().split()
+        q_lower = query.lower()
+        q_terms = q_lower.split()
+
+        # 1. Alias shortcut: check multi-word phrases first (longest match wins)
+        for phrase in sorted(QUERY_ALIAS_MAP.keys(), key=len, reverse=True):
+            if phrase in q_lower:
+                target_id = QUERY_ALIAS_MAP[phrase]
+                for chunk in self.chunks:
+                    if chunk.get("chunk_id") == target_id:
+                        # Score normally but guarantee minimum 3 for alias hit
+                        score = max(3, sum(1 for t in q_terms if t in self._get_searchable(chunk)))
+                        print(f"[Retriever]: Alias match '{phrase}' -> {target_id} (score={score})")
+                        return chunk, score
+
+        # 2. Normal keyword scoring over enriched searchable text
         best_chunk, best_score = None, 0
         for chunk in self.chunks:
-            score = sum(1 for t in q_terms if t in chunk["text"].lower())
+            searchable = self._get_searchable(chunk)
+            score = sum(1 for t in q_terms if t in searchable)
             if score > best_score:
                 best_score, best_chunk = score, chunk
         return best_chunk, best_score
@@ -128,21 +186,19 @@ class Generator:
     """
 
     SYSTEM_PROMPT = (
-        "You are a facts-only mutual fund information assistant.\n"
+        "You are a professional, facts-only mutual fund information assistant.\n"
         "Rules:\n"
         "1. Answer ONLY from the provided context. Do NOT use prior knowledge.\n"
-        "2. Answer ONLY the specific field or metric the user asked about. "
-        "If the user asks for NAV, return ONLY the NAV. If they ask for expense ratio, return ONLY the expense ratio. "
-        "Do NOT return all fund details. Be concise and precise.\n"
-        "3. Format your response as:\n"
-        "   Fund Name: <name>\n"
-        "   <Requested Field>: <value>\n"
-        "   (add Date/as of date if available for NAV)\n"
-        "4. Do NOT include any URLs, links, or source lines — those are added by code.\n"
-        "5. Do NOT provide investment advice, opinions, or return predictions.\n"
-        "6. Be lenient with mutual fund name matching. If the context fund name is similar to the user's query "
-        "(e.g. 'HDFC Mid Cap Fund' vs 'HDFC Mid Cap Opportunities Fund'), assume they are the same.\n"
-        "7. If the context does not contain ANY relevant information to answer the question, reply ONLY with: DONT_KNOW\n"
+        "2. CONCISE MODE: If the user asks for a specific metric (NAV, Expense Ratio, Exit Load, etc.), return ONLY a focused response in this format:\n"
+        "   Fund: <fund_name>\n"
+        "   <Metric>: <value>\n"
+        "   Date: <as_of_date>\n"
+        "   (No other text, no explanations, no 'Here is the information')\n"
+        "3. If the user asks a general question, provide a brief summary from context.\n"
+        "4. HISTORY: Use the provided chat history to resolve pronouns (like 'it', 'its', 'the fund').\n"
+        "5. Do NOT include any URLs or links.\n"
+        "6. Do NOT provide investment advice.\n"
+        "7. If the context is insufficient, reply ONLY with: DONT_KNOW\n"
     )
 
     def __init__(self, use_groq=None):
@@ -202,33 +258,37 @@ class Generator:
     def _extractive(self, text: str, query: str = "") -> str:
         return self._find_relevant_sentences(text, query)
 
-    def _groq_call(self, chunk_text: str, query: str):
+    def _groq_call(self, chunk_text: str, query: str, history: list = None):
+        hist_text = ""
+        if history:
+            hist_text = "RECENT HISTORY:\n" + "\n".join([f"{h['role'].upper()}: {h['content']}" for h in history[-2:]])
+
         try:
             resp = self._client.chat.completions.create(
                 model=GROQ_MODEL,
-                temperature=0.1,
+                temperature=0.0,
                 max_tokens=256,
                 messages=[
                     {"role": "system", "content": self.SYSTEM_PROMPT},
-                    {"role": "user",   "content": f"CONTEXT:\n{chunk_text}\n\nUSER QUERY:\n{query}"}
+                    {"role": "user",   "content": f"{hist_text}\n\nCONTEXT:\n{chunk_text}\n\nUSER QUERY:\n{query}"}
                 ]
             )
             body = resp.choices[0].message.content.strip()
-            if body == "DONT_KNOW" or not body:
+            if "DONT_KNOW" in body or not body:
                 return None
             return re.sub(r'https?://\S+', '', body).strip()
         except Exception as e:
             print(f"[Generator]: Groq call failed ({e}) — falling back to extractive.")
             return None
 
-    def generate(self, chunk: dict, query: str = ""):
+    def generate(self, chunk: dict, query: str = "", history: list = None):
         """Returns (body, source_url, fetch_date). body='' signals don't-know."""
         text       = chunk["text"]
         source_url = chunk["metadata"].get("source_url", "")
         fetch_date = chunk["metadata"].get("fetch_date", "N/A")
 
         if self.use_groq and self._client:
-            body = self._groq_call(text, query)
+            body = self._groq_call(text, query, history)
             if body is None:
                 return "", source_url, fetch_date   # signals dont_know
         else:
@@ -290,7 +350,7 @@ class Orchestrator:
             if self.retriever.chunks else ALLOWED_URLS[0]
         )
 
-    def ask(self, query: str) -> str:
+    def ask(self, query: str, history: list = None) -> str:
         print(f"\n[User]: {query}")
 
         # 1. PII Guard — zero URLs on block
@@ -307,19 +367,37 @@ class Orchestrator:
             ref_url = chunk["metadata"]["source_url"] if chunk else self.default_url
             return PostProcessor.process(REFUSAL, ref_url, "", "refusal")
 
-        # 3. Retrieval with confidence gate
-        chunk, score = self.retriever.retrieve(query)
+        # 3. Enhanced Retrieval (Check if query needs history resolution)
+        processed_query = query
+        if history and any(kw in query.lower() for kw in ["it", "its", "that fund", "this fund", "the fund"]):
+            # Find the last fund mentioned in history
+            for turn in reversed(history):
+                if turn["role"] == "assistant" and "Fund:" in turn["content"]:
+                    last_fund = turn["content"].split("Fund:")[1].split("\n")[0].strip()
+                    processed_query = f"{query} ({last_fund})"
+                    print(f"[System]: History resolution -> {processed_query}")
+                    break
+
+        # 4. Retrieval with confidence gate
+        chunk, score = self.retriever.retrieve(processed_query)
         print(f"[System]: Retrieval score -> {score}")
+        
+        # If low confidence on processed query, try again with original if different
+        if score < CONFIDENCE_THRESHOLD and processed_query != query:
+            chunk2, score2 = self.retriever.retrieve(query)
+            if score2 > score:
+                chunk, score = chunk2, score2
+
         if not chunk or score < CONFIDENCE_THRESHOLD:
             print("[System]: Low confidence -> dont_know (0 URLs)")
             return PostProcessor.process("", "", "", "dont_know")
 
-        # 4. Generation (Groq or extractive)
-        body, url, date = self.generator.generate(chunk, query)
+        # 5. Generation (Groq or extractive)
+        body, url, date = self.generator.generate(chunk, query, history)
         if not body:
             return PostProcessor.process("", "", "", "dont_know")
 
-        # 5. Post-Process + URL policy enforcement
+        # 6. Post-Process + URL policy enforcement
         return PostProcessor.process(body, url, date, "factual")
 
 
