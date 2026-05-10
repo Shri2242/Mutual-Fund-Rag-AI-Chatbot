@@ -242,37 +242,62 @@ jobs:
           SOFT404="${{ steps.outcome.outputs.soft404 }}"
           DURATION="${{ steps.outcome.outputs.duration }}"
           RUN_NUM="${{ github.run_number }}"
+          TRIGGER="${{ github.event_name }}"
+          FORCE="${{ github.event.inputs.force || 'false' }}"
           TS=$(TZ="Asia/Kolkata" date +"%Y-%m-%d %H:%M:%S IST")
 
-          # Outcome icon
           case "$OUTCOME" in
-            ok)      ICON="OK" ;;
-            partial) ICON="PARTIAL" ;;
-            frozen)  ICON="FROZEN" ;;
-            failed)  ICON="FAILED" ;;
-            *)       ICON="UNKNOWN" ;;
+            ok)      ICON="✅ OK" ;;
+            partial) ICON="⚠️ PARTIAL" ;;
+            frozen)  ICON="🧊 FROZEN" ;;
+            failed)  ICON="❌ FAILED" ;;
+            *)       ICON="❓ UNKNOWN" ;;
           esac
 
-          # heredoc MUST start at column 0 (no leading spaces)
-cat >> "$GITHUB_STEP_SUMMARY" << EOF
-## Mutual Fund Pipeline Run #${RUN_NUM} — ${ICON}
+          python3 - <<PYEOF
+import os, textwrap
+summary_file = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stdout")
+outcome  = os.environ.get("OUTCOME",   "unknown")
+drift    = os.environ.get("DRIFT",     "0")
+soft404  = os.environ.get("SOFT404",   "0")
+duration = os.environ.get("DURATION",  "0")
+run_num  = os.environ.get("RUN_NUM",   "?")
+trigger  = os.environ.get("TRIGGER",   "?")
+force    = os.environ.get("FORCE",     "false")
+ts       = os.environ.get("TS",        "?")
+icon     = os.environ.get("ICON",      "?")
+
+md = textwrap.dedent(f"""
+## Mutual Fund Pipeline Run #{run_num} — {icon}
 
 | Field | Value |
 |---|---|
-| Run time (IST) | ${TS} |
-| Outcome | **${OUTCOME}** |
-| Drift Count | ${DRIFT} |
-| Soft-404s | ${SOFT404} |
-| Duration | ${DURATION}s |
-| Trigger | ${{ github.event_name }} |
-| Force Mode | ${{ github.event.inputs.force || 'false' }} |
+| Run time (IST) | {ts} |
+| Outcome | **{outcome}** |
+| Drift Count | {drift} |
+| Soft-404s | {soft404} |
+| Duration | {duration}s |
+| Trigger | {trigger} |
+| Force Mode | {force} |
 
 ### Outcome Reference
-- OK: All 5 URLs fetched and index updated normally
-- PARTIAL: Some URLs failed (soft-404); rest were updated
-- FROZEN: Drift detected across 2+ URLs; index NOT overwritten (safety gate)
-- FAILED: Hard error during pipeline execution
-EOF
+- **OK**: All 5 URLs fetched and index updated normally
+- **PARTIAL**: Some URLs failed (soft-404); rest were updated
+- **FROZEN**: Drift detected across 2+ URLs; index NOT overwritten (safety gate)
+- **FAILED**: Hard error during pipeline execution
+""")
+
+with open(summary_file, "a", encoding="utf-8") as f:
+    f.write(md)
+PYEOF
+        env:
+          OUTCOME: ${{ steps.outcome.outputs.outcome }}
+          DRIFT: ${{ steps.outcome.outputs.drift }}
+          SOFT404: ${{ steps.outcome.outputs.soft404 }}
+          DURATION: ${{ steps.outcome.outputs.duration }}
+          RUN_NUM: ${{ github.run_number }}
+          TRIGGER: ${{ github.event_name }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
 
       # ── Slack alert (only if SLACK_WEBHOOK_URL secret is configured) ──────
       - name: Alert on freeze or failure
