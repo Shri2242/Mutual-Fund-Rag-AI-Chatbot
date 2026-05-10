@@ -52,10 +52,11 @@ on:
           - "false"
           - "true"
 
-  # ── Push to main: dry-run validation only ─────────────────────────────────
+  # ── Push to main/master: dry-run validation only ───────────────────────
   push:
     branches:
       - main
+      - master
     paths:
       - "src/**"
       - "requirements.txt"
