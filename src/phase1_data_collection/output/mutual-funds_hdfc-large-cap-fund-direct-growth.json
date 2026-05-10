@@ -1,0 +1,42 @@
+{
+  "scheme": "HDFC Large Cap Fund Direct Growth",
+  "source_url": "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
+  "fetch_date": "2026-05-10",
+  "fetch_method": "static",
+  "fields": {
+    "expense_ratio": "0.98",
+    "exit_load": "Exit load of 1% if redeemed within 1 year",
+    "min_sip": 100,
+    "riskometer": "Very High",
+    "benchmark": "NIFTY 100 Total Return Index",
+    "lock_in_period": null,
+    "fund_manager": "Prashant Jain",
+    "nav": 1205.369,
+    "category": "Equity",
+    "sub_category": "Large Cap",
+    "aum": 35458.4981,
+    "top_5_holdings": [
+      {
+        "company_name": "ICICI Bank Ltd.",
+        "allocation_percent": 9.39
+      },
+      {
+        "company_name": "HDFC Bank Ltd.",
+        "allocation_percent": 8
+      },
+      {
+        "company_name": "Bharti Airtel Ltd.",
+        "allocation_percent": 5.99
+      },
+      {
+        "company_name": "Reliance Industries Ltd.",
+        "allocation_percent": 5.4
+      },
+      {
+        "company_name": "Kotak Mahindra Bank Ltd.",
+        "allocation_percent": 5.13
+      }
+    ]
+  },
+  "partial_data": false
+}

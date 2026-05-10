@@ -1,0 +1,42 @@
+{
+  "scheme": "HDFC Mid Cap Fund Direct Growth",
+  "source_url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+  "fetch_date": "2026-05-10",
+  "fetch_method": "static",
+  "fields": {
+    "expense_ratio": "0.76",
+    "exit_load": "Exit load of 1% if redeemed within 1 year.",
+    "min_sip": 100,
+    "riskometer": "Very High",
+    "benchmark": "NIFTY Midcap 150 Total Return Index",
+    "lock_in_period": null,
+    "fund_manager": "Chirag Setalvad",
+    "nav": 223.895,
+    "category": "Equity",
+    "sub_category": "Mid Cap",
+    "aum": 85357.9246,
+    "top_5_holdings": [
+      {
+        "company_name": "Max Financial Services Ltd.",
+        "allocation_percent": 4.5
+      },
+      {
+        "company_name": "The Federal Bank Ltd.",
+        "allocation_percent": 3.88
+      },
+      {
+        "company_name": "AU Small Finance Bank Ltd.",
+        "allocation_percent": 3.88
+      },
+      {
+        "company_name": "Indian Bank",
+        "allocation_percent": 3.65
+      },
+      {
+        "company_name": "Ipca Laboratories Ltd.",
+        "allocation_percent": 3.38
+      }
+    ]
+  },
+  "partial_data": false
+}

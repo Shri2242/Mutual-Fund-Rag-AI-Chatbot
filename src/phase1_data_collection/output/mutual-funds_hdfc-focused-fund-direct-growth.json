@@ -1,0 +1,42 @@
+{
+  "scheme": "HDFC Focused Fund Direct Growth",
+  "source_url": "https://groww.in/mutual-funds/hdfc-focused-fund-direct-growth",
+  "fetch_date": "2026-05-10",
+  "fetch_method": "static",
+  "fields": {
+    "expense_ratio": "0.69",
+    "exit_load": "Exit load of 1% if redeemed within 1 year",
+    "min_sip": 100,
+    "riskometer": "Very High",
+    "benchmark": "NIFTY 500 Total Return Index",
+    "lock_in_period": null,
+    "fund_manager": "Vinay Kulkarni",
+    "nav": 257.363,
+    "category": "Equity",
+    "sub_category": "Flexi Cap",
+    "aum": 24169.507,
+    "top_5_holdings": [
+      {
+        "company_name": "ICICI Bank Ltd.",
+        "allocation_percent": 9.33
+      },
+      {
+        "company_name": "HDFC Bank Ltd.",
+        "allocation_percent": 8.63
+      },
+      {
+        "company_name": "Axis Bank Ltd.",
+        "allocation_percent": 7.21
+      },
+      {
+        "company_name": "State Bank of India",
+        "allocation_percent": 5.72
+      },
+      {
+        "company_name": "Kotak Mahindra Bank Ltd.",
+        "allocation_percent": 5.52
+      }
+    ]
+  },
+  "partial_data": false
+}

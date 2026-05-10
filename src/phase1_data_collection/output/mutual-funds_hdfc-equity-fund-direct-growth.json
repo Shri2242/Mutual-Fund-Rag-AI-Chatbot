@@ -1,0 +1,42 @@
+{
+  "scheme": "HDFC Flexi Cap Direct Plan Growth",
+  "source_url": "https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth",
+  "fetch_date": "2026-05-10",
+  "fetch_method": "static",
+  "fields": {
+    "expense_ratio": "0.86",
+    "exit_load": "Exit load of 1% if redeemed within 1 year\r\n",
+    "min_sip": 100,
+    "riskometer": "Very High",
+    "benchmark": "NIFTY 500 Total Return Index",
+    "lock_in_period": null,
+    "fund_manager": "Prashant Jain",
+    "nav": 2163.717,
+    "category": "Equity",
+    "sub_category": "Flexi Cap",
+    "aum": 91334.9081,
+    "top_5_holdings": [
+      {
+        "company_name": "ICICI Bank Ltd.",
+        "allocation_percent": 8.82
+      },
+      {
+        "company_name": "HDFC Bank Ltd.",
+        "allocation_percent": 7.04
+      },
+      {
+        "company_name": "Axis Bank Ltd.",
+        "allocation_percent": 6.87
+      },
+      {
+        "company_name": "State Bank of India",
+        "allocation_percent": 4.75
+      },
+      {
+        "company_name": "SBI Life Insurance Company Ltd.",
+        "allocation_percent": 3.89
+      }
+    ]
+  },
+  "partial_data": false
+}

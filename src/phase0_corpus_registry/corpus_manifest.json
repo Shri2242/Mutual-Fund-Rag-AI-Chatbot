@@ -1,0 +1,67 @@
+{
+  "project": "Mutual Fund FAQ Assistant",
+  "amc": "HDFC Mutual Fund",
+  "reference_product": "Groww",
+  "corpus_version": "v1",
+  "scope_locked": true,
+  "total_urls": 5,
+  "last_validated": null,
+  "last_ingested": "2026-05-04T19:29:16.504173+00:00",
+  "corpus_urls": [
+    {
+      "id": 1,
+      "scheme": "HDFC Mid Cap Opportunities Fund",
+      "category": "Mid Cap",
+      "url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+      "status": "soft_404",
+      "last_fetched": "2026-05-04T19:29:16.504173+00:00",
+      "content_hash": "c34c60e8cdef8336aa3f38431c31d6efaeaeffa2b6798e12ad61f2bc2cd999fa",
+      "stable_content_hash": "e6bd75625e2ec7d68ea7764f18002df7c404f8608be3725e3a1716b30052f5f7",
+      "last_updated_from_source": "2026-05-10T19:43:45.676562+00:00"
+    },
+    {
+      "id": 2,
+      "scheme": "HDFC Equity Fund",
+      "category": "Large & Mid Cap",
+      "url": "https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth",
+      "status": "soft_404",
+      "last_fetched": "2026-05-04T19:29:16.504173+00:00",
+      "content_hash": "dacc1e567866aa05b76bb9d3437150dd75c1b03efd3f911d653aeb399f30a6d1",
+      "stable_content_hash": "e6109f853638cf235689ddcdc8251765937fada991a0952c3679fa7c0ae3ff4f",
+      "last_updated_from_source": "2026-05-10T19:43:45.676562+00:00"
+    },
+    {
+      "id": 3,
+      "scheme": "HDFC Focused Fund",
+      "category": "Focused / Multi Cap",
+      "url": "https://groww.in/mutual-funds/hdfc-focused-fund-direct-growth",
+      "status": "soft_404",
+      "last_fetched": "2026-05-04T19:29:16.504173+00:00",
+      "content_hash": "c2d819dfb0e27461b757b8a62483a78eb5be53f5a03df00a16cebed4f006028f",
+      "stable_content_hash": "5471e2315619f72829b2e0802db8444d6a971e26ed4cd3a4d43605b8844ca8d7",
+      "last_updated_from_source": "2026-05-10T19:43:45.676562+00:00"
+    },
+    {
+      "id": 4,
+      "scheme": "HDFC ELSS Tax Saver Fund",
+      "category": "ELSS",
+      "url": "https://groww.in/mutual-funds/hdfc-elss-tax-saver-fund-direct-plan-growth",
+      "status": "soft_404",
+      "last_fetched": "2026-05-04T19:29:16.504173+00:00",
+      "content_hash": "6fe7d30976f7043808aaec0e19bba79f589ae10f680ca728f4078ea073274e7f",
+      "stable_content_hash": "fb2ffebef4e9c64846d748010f4350fb574043d32c0b4134aea9dc95e1118705",
+      "last_updated_from_source": "2026-05-10T19:43:45.676562+00:00"
+    },
+    {
+      "id": 5,
+      "scheme": "HDFC Large Cap Fund",
+      "category": "Large Cap",
+      "url": "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
+      "status": "soft_404",
+      "last_fetched": "2026-05-04T19:29:16.504173+00:00",
+      "content_hash": "f3123fd812f45c171f63f95bf06bcb6c524358db7eb8bcb85fe5c4e394511eaf",
+      "stable_content_hash": "d6cb9e22b9b5b56982ce481ba266c4e135a43fbc507c7e144a25575f11a3a858",
+      "last_updated_from_source": "2026-05-10T19:43:45.676562+00:00"
+    }
+  ]
+}

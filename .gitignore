@@ -1,0 +1,41 @@
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ─── Virtual Environments ─────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ─── Environment Variables (SECRETS — never commit) ──────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─── Vector Store & Index ─────────────────────────────────────────────────────
+data/index/.staging/
+data/index/chroma/
+
+# ─── Raw HTML Cache ───────────────────────────────────────────────────────────
+src/phase1_data_collection/raw_html/*.html
+
+# ─── Scratch / Temp Files ─────────────────────────────────────────────────────
+scratch_*.py
+scratch_*.txt
+scratch_*.json
+
+# ─── IDE & OS ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo

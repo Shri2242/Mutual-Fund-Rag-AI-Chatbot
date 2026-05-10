@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grow RAG Chatbot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Feather Icons -->
+  <script src="https://unpkg.com/feather-icons"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="logo-area">
+        <div class="logo-text">
+          <h1>Grow RAG</h1>
+          <span>Professional Finance Assistant</span>
+        </div>
+      </div>
+
+      <div class="sidebar-action">
+        <button id="clear-chat-btn" class="clear-chat-btn">
+          <i data-feather="plus"></i> CLEAR CHAT
+        </button>
+      </div>
+
+      <nav class="main-nav">
+        <ul>
+          <li class="active"><i data-feather="home"></i> Home</li>
+          <li><i data-feather="file-text"></i> Investment FAQ</li>
+          <li><i data-feather="trending-up"></i> Market Trends</li>
+          <li><i data-feather="clock"></i> Historical Data</li>
+        </ul>
+      </nav>
+
+      <div class="example-questions-section">
+        <h2 class="section-title">EXAMPLE QUESTIONS</h2>
+        <ul class="example-list" id="sidebar-examples">
+          <li>"What is the expense ratio of HDFC Mid Cap Fund?"</li>
+          <li>"What is the exit load of HDFC Equity Fund?"</li>
+        </ul>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="last-updated">
+          <i data-feather="clock" style="width: 14px; height: 14px;"></i>
+          <span>LAST UPDATED: TODAY, 09:45 AM</span>
+        </div>
+        <ul class="footer-nav">
+          <li><i data-feather="help-circle"></i> Help</li>
+          <li><i data-feather="settings"></i> Settings</li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- Top Header -->
+      <header class="top-header">
+        <div class="header-left">
+          <h2>Grow RAG Chatbot</h2>
+          <span class="index-badge"><span class="dot"></span> Index: Healthy</span>
+        </div>
+        <div class="header-right">
+          <button class="icon-btn"><i data-feather="info"></i></button>
+          <button class="icon-btn"><i data-feather="settings"></i></button>
+        </div>
+      </header>
+
+      <!-- Chat Container -->
+      <div class="chat-container">
+        
+        <!-- Empty State Hero (Hidden once chat starts) -->
+        <div class="empty-state" id="empty-state">
+          <div class="hero-icon">
+            <i data-feather="sparkles" style="width: 24px; height: 24px; color: #fff;"></i>
+          </div>
+          <h1>Grow RAG: Facts-Only Assistant</h1>
+          <p>Instantly query verified documents for listed HDFC schemes. I synthesize complex financial data into concise, accurate answers.</p>
+          <div class="facts-pill">
+            <i data-feather="shield"></i> Facts-only. No investment advice.
+          </div>
+        </div>
+
+        <!-- Chat History -->
+        <div class="chat-history" id="chat-history" style="display: none;">
+          <!-- Messages will be injected here by app.js -->
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-wrapper">
+          <form id="chat-form" class="chat-form">
+            <button type="button" class="attachment-btn"><i data-feather="paperclip"></i></button>
+            <input type="text" id="query-input" placeholder="Ask a factual question about listed HDFC schemes..." autocomplete="off">
+            <button type="submit" class="send-btn" id="send-btn"><i data-feather="arrow-up"></i></button>
+          </form>
+          <div class="disclaimer">
+            Information is retrieved from the most recent official scheme documents. Verify critical data.
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    feather.replace();
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>

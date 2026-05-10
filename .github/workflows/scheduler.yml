@@ -1,0 +1,300 @@
+###############################################################################
+# Mutual Fund FAQ Assistant — Data Refresh Scheduler
+#
+# Triggers:
+#   • Daily cron at 04:30 UTC (10:00 AM IST) — automated daily refresh
+#   • workflow_dispatch — manual trigger from GitHub UI (with optional force flag)
+#   • push to main — runs dry-run validation only (no scraping)
+#
+# Secrets required (set in GitHub -> Settings -> Secrets -> Actions):
+#   GROQ_API_KEY          — Groq LLM API key (starts with gsk_)
+#
+# Optional secrets:
+#   SLACK_WEBHOOK_URL     — For failure/freeze alerts (leave unset to disable)
+#
+# Fixes applied:
+#   1. Cron updated to 04:30 UTC = 10:00 AM IST
+#   2. secrets.SLACK_WEBHOOK_URL check moved to env context (can't reference
+#      secrets directly in `if:` expressions — use env var check instead)
+#   3. Slack alert `if:` condition fixed (secrets context not allowed in if)
+#   4. GITHUB_STEP_SUMMARY heredoc indentation fixed (must be column 0)
+#   5. `continue-on-error` moved off pipeline steps so frozen outcome
+#      doesn't silently swallow real failures
+#   6. `cache` key on preflight job removed — pip cache only in refresh job
+#   7. Playwright install separated with error handling
+#   8. push trigger paths fixed to also include run_scheduler.py
+###############################################################################
+
+name: "Mutual Fund — Daily Data Refresh (10:00 AM IST)"
+
+on:
+  # ── Scheduled: daily at 04:30 UTC = 10:00 AM IST ─────────────────────────
+  schedule:
+    - cron: "30 4 * * *"
+
+  # ── Manual trigger with optional flags ────────────────────────────────────
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force-run (bypass drift-freeze logic)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      dry_run:
+        description: "Dry-run (pre-flight checks only, no scraping)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+  # ── Push to main: dry-run validation only ─────────────────────────────────
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "requirements.txt"
+      - "run_scheduler.py"
+      - ".github/workflows/scheduler.yml"
+
+###############################################################################
+# Permissions
+###############################################################################
+permissions:
+  contents: write   # needed to commit refreshed index back to repo
+  actions: read
+
+###############################################################################
+# Environment — shared across all jobs
+###############################################################################
+env:
+  PYTHON_VERSION: "3.11"
+  TZ: "UTC"
+
+###############################################################################
+jobs:
+###############################################################################
+
+  # ── JOB 1: Pre-flight / dry-run checks (always runs) ─────────────────────
+  preflight:
+    name: "Pre-flight Checks"
+    runs-on: ubuntu-latest
+    outputs:
+      should_run_full: ${{ steps.decide.outputs.should_run_full }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pre-flight dry-run checks
+        run: python run_scheduler.py --dry-run
+
+      - name: Decide whether to run full pipeline
+        id: decide
+        run: |
+          # On push events: dry-run only — do NOT scrape on every push
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "should_run_full=false" >> "$GITHUB_OUTPUT"
+            echo "Push event -- dry-run only. Full pipeline skipped."
+          # Manual trigger with dry_run=true
+          elif [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            echo "should_run_full=false" >> "$GITHUB_OUTPUT"
+            echo "Manual dry-run requested. Full pipeline skipped."
+          else
+            echo "should_run_full=true" >> "$GITHUB_OUTPUT"
+            echo "Full pipeline will run."
+          fi
+
+  # ── JOB 2: Full pipeline (scheduled + manual only) ────────────────────────
+  refresh:
+    name: "Data Refresh Pipeline"
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: needs.preflight.outputs.should_run_full == 'true'
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history needed for git push back
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # Playwright is only needed if static fetch returns < 2000 chars (fallback)
+      - name: Install Playwright Chromium (headless fallback)
+        run: python -m playwright install chromium --with-deps
+        continue-on-error: true   # non-fatal: static fetch handles all 5 Groww URLs fine
+
+      # Cache the data/index dir across runs so drift detection works correctly
+      - name: Restore cached data index
+        uses: actions/cache@v4
+        with:
+          path: data/index
+          key: data-index-${{ github.run_id }}
+          restore-keys: |
+            data-index-
+
+      # ── Run pipeline ───────────────────────────────────────────────────────
+      - name: Run pipeline (normal mode)
+        if: github.event.inputs.force != 'true'
+        id: pipeline_normal
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python run_scheduler.py
+        # NOTE: do NOT use continue-on-error here — let the frozen/failed
+        # outcome fall through to the log parser so we can report correctly.
+
+      - name: Run pipeline (force mode)
+        if: github.event.inputs.force == 'true'
+        id: pipeline_force
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python run_scheduler.py --force
+
+      # ── Parse outcome from refresh_log.jsonl ──────────────────────────────
+      - name: Parse pipeline outcome
+        id: outcome
+        if: always()
+        run: |
+          LOGFILE="data/index/refresh_log.jsonl"
+          if [[ -f "$LOGFILE" ]]; then
+            LAST=$(tail -1 "$LOGFILE")
+            OUTCOME=$(echo "$LAST" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('outcome','unknown'))")
+            DRIFT=$(echo "$LAST"   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('drift_count',0))")
+            SOFT404=$(echo "$LAST" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('soft_404_count',0))")
+            DURATION=$(echo "$LAST"| python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('duration_seconds',0))")
+            echo "outcome=$OUTCOME"     >> "$GITHUB_OUTPUT"
+            echo "drift=$DRIFT"         >> "$GITHUB_OUTPUT"
+            echo "soft404=$SOFT404"     >> "$GITHUB_OUTPUT"
+            echo "duration=$DURATION"   >> "$GITHUB_OUTPUT"
+            echo "Pipeline outcome: $OUTCOME | drift=$DRIFT | soft404=$SOFT404 | duration=${DURATION}s"
+          else
+            echo "outcome=no_log" >> "$GITHUB_OUTPUT"
+            echo "drift=0"        >> "$GITHUB_OUTPUT"
+            echo "soft404=0"      >> "$GITHUB_OUTPUT"
+            echo "duration=0"     >> "$GITHUB_OUTPUT"
+            echo "[WARNING] refresh_log.jsonl not found -- pipeline may have crashed before writing"
+          fi
+
+      # ── Upload full index as artifact (always, for debugging) ─────────────
+      - name: Upload data index artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-index-run-${{ github.run_number }}
+          path: data/index/
+          retention-days: 14
+
+      # ── Upload refresh log as separate artifact ────────────────────────────
+      - name: Upload refresh log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: refresh-log-run-${{ github.run_number }}
+          path: data/index/refresh_log.jsonl
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ── Commit updated index back to repo (only on ok or partial) ─────────
+      - name: Commit refreshed index to repository
+        if: >
+          steps.outcome.outputs.outcome == 'ok' ||
+          steps.outcome.outputs.outcome == 'partial'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/index/ src/phase0_corpus_registry/corpus_manifest.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(scheduler): daily refresh [outcome=${{ steps.outcome.outputs.outcome }}] drift=${{ steps.outcome.outputs.drift }} soft404=${{ steps.outcome.outputs.soft404 }} [skip ci]"
+            git push
+            echo "[OK] Index committed back to repository"
+          else
+            echo "[=] No index changes detected -- nothing to commit"
+          fi
+
+      # ── Job Summary (shown on GitHub Actions run page) ────────────────────
+      - name: Write Job Summary
+        if: always()
+        run: |
+          OUTCOME="${{ steps.outcome.outputs.outcome }}"
+          DRIFT="${{ steps.outcome.outputs.drift }}"
+          SOFT404="${{ steps.outcome.outputs.soft404 }}"
+          DURATION="${{ steps.outcome.outputs.duration }}"
+          RUN_NUM="${{ github.run_number }}"
+          TS=$(TZ="Asia/Kolkata" date +"%Y-%m-%d %H:%M:%S IST")
+
+          # Outcome icon
+          case "$OUTCOME" in
+            ok)      ICON="OK" ;;
+            partial) ICON="PARTIAL" ;;
+            frozen)  ICON="FROZEN" ;;
+            failed)  ICON="FAILED" ;;
+            *)       ICON="UNKNOWN" ;;
+          esac
+
+          # heredoc MUST start at column 0 (no leading spaces)
+cat >> "$GITHUB_STEP_SUMMARY" << EOF
+## Mutual Fund Pipeline Run #${RUN_NUM} — ${ICON}
+
+| Field | Value |
+|---|---|
+| Run time (IST) | ${TS} |
+| Outcome | **${OUTCOME}** |
+| Drift Count | ${DRIFT} |
+| Soft-404s | ${SOFT404} |
+| Duration | ${DURATION}s |
+| Trigger | ${{ github.event_name }} |
+| Force Mode | ${{ github.event.inputs.force || 'false' }} |
+
+### Outcome Reference
+- OK: All 5 URLs fetched and index updated normally
+- PARTIAL: Some URLs failed (soft-404); rest were updated
+- FROZEN: Drift detected across 2+ URLs; index NOT overwritten (safety gate)
+- FAILED: Hard error during pipeline execution
+EOF
+
+      # ── Slack alert (only if SLACK_WEBHOOK_URL secret is configured) ──────
+      - name: Alert on freeze or failure
+        if: >
+          always() &&
+          (steps.outcome.outputs.outcome == 'frozen' ||
+           steps.outcome.outputs.outcome == 'failed')
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          # Guard: only send if secret is actually set
+          if [[ -z "$SLACK_WEBHOOK_URL" ]]; then
+            echo "SLACK_WEBHOOK_URL not configured -- skipping alert"
+            exit 0
+          fi
+          OUTCOME="${{ steps.outcome.outputs.outcome }}"
+          if [[ "$OUTCOME" == "frozen" ]]; then
+            EMOJI="[FROZEN]"
+          else
+            EMOJI="[FAILED]"
+          fi
+          MSG="${EMOJI} Mutual Fund Pipeline ${OUTCOME^^} on run #${{ github.run_number }}. Drift=${{ steps.outcome.outputs.drift }}, Soft404=${{ steps.outcome.outputs.soft404 }}. View: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -s -X POST -H "Content-type: application/json" \
+            --data "{\"text\": \"$MSG\"}" \
+            "$SLACK_WEBHOOK_URL"

@@ -1,0 +1,12 @@
+{
+  "built_at": "2026-05-10T19:44:41.887608+00:00",
+  "embedder": "all-MiniLM-L6-v2 (Chroma Default)",
+  "n_chunks": 5,
+  "per_scheme_counts": {
+    "HDFC ELSS Tax Saver Fund Direct Plan Growth": 1,
+    "HDFC Flexi Cap Direct Plan Growth": 1,
+    "HDFC Focused Fund Direct Growth": 1,
+    "HDFC Large Cap Fund Direct Growth": 1,
+    "HDFC Mid Cap Fund Direct Growth": 1
+  }
+}

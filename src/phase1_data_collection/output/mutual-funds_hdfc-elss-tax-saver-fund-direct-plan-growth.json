@@ -1,0 +1,42 @@
+{
+  "scheme": "HDFC ELSS Tax Saver Fund Direct Plan Growth",
+  "source_url": "https://groww.in/mutual-funds/hdfc-elss-tax-saver-fund-direct-plan-growth",
+  "fetch_date": "2026-05-10",
+  "fetch_method": "static",
+  "fields": {
+    "expense_ratio": "1.1",
+    "exit_load": "Nil",
+    "min_sip": 500,
+    "riskometer": "Very High",
+    "benchmark": "NIFTY 500 Total Return Index",
+    "lock_in_period": 3,
+    "fund_manager": "Vinay Kulkarni",
+    "nav": 1464.275,
+    "category": "Equity",
+    "sub_category": "ELSS",
+    "aum": 14615.1912,
+    "top_5_holdings": [
+      {
+        "company_name": "ICICI Bank Ltd.",
+        "allocation_percent": 9.08
+      },
+      {
+        "company_name": "HDFC Bank Ltd.",
+        "allocation_percent": 8.31
+      },
+      {
+        "company_name": "Axis Bank Ltd.",
+        "allocation_percent": 7.04
+      },
+      {
+        "company_name": "SBI Life Insurance Company Ltd.",
+        "allocation_percent": 4.88
+      },
+      {
+        "company_name": "State Bank of India",
+        "allocation_percent": 4.69
+      }
+    ]
+  },
+  "partial_data": false
+}

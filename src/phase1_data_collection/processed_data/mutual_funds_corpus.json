@@ -1,0 +1,212 @@
+[
+  {
+    "scheme": "HDFC ELSS Tax Saver Fund Direct Plan Growth",
+    "source_url": "https://groww.in/mutual-funds/hdfc-elss-tax-saver-fund-direct-plan-growth",
+    "fetch_date": "2026-05-04",
+    "fetch_method": "static",
+    "fields": {
+      "expense_ratio": "1.11",
+      "exit_load": "Nil",
+      "min_sip": 500,
+      "riskometer": "Very High",
+      "benchmark": "NIFTY 500 Total Return Index",
+      "lock_in_period": 3,
+      "fund_manager": "Vinay Kulkarni",
+      "nav": 1448.241,
+      "category": "Equity",
+      "sub_category": "ELSS",
+      "aum": 14615.1912,
+      "top_5_holdings": [
+        {
+          "company_name": "ICICI Bank Ltd.",
+          "allocation_percent": 9.08
+        },
+        {
+          "company_name": "HDFC Bank Ltd.",
+          "allocation_percent": 8.31
+        },
+        {
+          "company_name": "Axis Bank Ltd.",
+          "allocation_percent": 7.04
+        },
+        {
+          "company_name": "SBI Life Insurance Company Ltd.",
+          "allocation_percent": 4.88
+        },
+        {
+          "company_name": "State Bank of India",
+          "allocation_percent": 4.69
+        }
+      ]
+    },
+    "partial_data": false
+  },
+  {
+    "scheme": "HDFC Flexi Cap Direct Plan Growth",
+    "source_url": "https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth",
+    "fetch_date": "2026-05-04",
+    "fetch_method": "static",
+    "fields": {
+      "expense_ratio": "0.67",
+      "exit_load": "Exit load of 1% if redeemed within 1 year\r\n",
+      "min_sip": 100,
+      "riskometer": "Very High",
+      "benchmark": "NIFTY 500 Total Return Index",
+      "lock_in_period": null,
+      "fund_manager": "Prashant Jain",
+      "nav": 2137,
+      "category": "Equity",
+      "sub_category": "Flexi Cap",
+      "aum": 91334.9081,
+      "top_5_holdings": [
+        {
+          "company_name": "ICICI Bank Ltd.",
+          "allocation_percent": 8.82
+        },
+        {
+          "company_name": "HDFC Bank Ltd.",
+          "allocation_percent": 7.04
+        },
+        {
+          "company_name": "Axis Bank Ltd.",
+          "allocation_percent": 6.87
+        },
+        {
+          "company_name": "State Bank of India",
+          "allocation_percent": 4.75
+        },
+        {
+          "company_name": "SBI Life Insurance Company Ltd.",
+          "allocation_percent": 3.89
+        }
+      ]
+    },
+    "partial_data": false
+  },
+  {
+    "scheme": "HDFC Focused Fund Direct Growth",
+    "source_url": "https://groww.in/mutual-funds/hdfc-focused-fund-direct-growth",
+    "fetch_date": "2026-05-04",
+    "fetch_method": "static",
+    "fields": {
+      "expense_ratio": "0.68",
+      "exit_load": "Exit load of 1% if redeemed within 1 year",
+      "min_sip": 100,
+      "riskometer": "Very High",
+      "benchmark": "NIFTY 500 Total Return Index",
+      "lock_in_period": null,
+      "fund_manager": "Vinay Kulkarni",
+      "nav": 254.183,
+      "category": "Equity",
+      "sub_category": "Flexi Cap",
+      "aum": 24169.507,
+      "top_5_holdings": [
+        {
+          "company_name": "ICICI Bank Ltd.",
+          "allocation_percent": 9.33
+        },
+        {
+          "company_name": "HDFC Bank Ltd.",
+          "allocation_percent": 8.63
+        },
+        {
+          "company_name": "Axis Bank Ltd.",
+          "allocation_percent": 7.21
+        },
+        {
+          "company_name": "State Bank of India",
+          "allocation_percent": 5.72
+        },
+        {
+          "company_name": "Kotak Mahindra Bank Ltd.",
+          "allocation_percent": 5.52
+        }
+      ]
+    },
+    "partial_data": false
+  },
+  {
+    "scheme": "HDFC Large Cap Fund Direct Growth",
+    "source_url": "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
+    "fetch_date": "2026-05-04",
+    "fetch_method": "static",
+    "fields": {
+      "expense_ratio": "1.04",
+      "exit_load": "Exit load of 1% if redeemed within 1 year",
+      "min_sip": 100,
+      "riskometer": "Very High",
+      "benchmark": "NIFTY 100 Total Return Index",
+      "lock_in_period": null,
+      "fund_manager": "Prashant Jain",
+      "nav": 1186.278,
+      "category": "Equity",
+      "sub_category": "Large Cap",
+      "aum": 35458.4981,
+      "top_5_holdings": [
+        {
+          "company_name": "ICICI Bank Ltd.",
+          "allocation_percent": 9.39
+        },
+        {
+          "company_name": "HDFC Bank Ltd.",
+          "allocation_percent": 8
+        },
+        {
+          "company_name": "Bharti Airtel Ltd.",
+          "allocation_percent": 5.99
+        },
+        {
+          "company_name": "Reliance Industries Ltd.",
+          "allocation_percent": 5.4
+        },
+        {
+          "company_name": "Kotak Mahindra Bank Ltd.",
+          "allocation_percent": 5.13
+        }
+      ]
+    },
+    "partial_data": false
+  },
+  {
+    "scheme": "HDFC Mid Cap Fund Direct Growth",
+    "source_url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+    "fetch_date": "2026-05-04",
+    "fetch_method": "static",
+    "fields": {
+      "expense_ratio": "0.73",
+      "exit_load": "Exit load of 1% if redeemed within 1 year.",
+      "min_sip": 100,
+      "riskometer": "Very High",
+      "benchmark": "NIFTY Midcap 150 Total Return Index",
+      "lock_in_period": null,
+      "fund_manager": "Chirag Setalvad",
+      "nav": 217.72,
+      "category": "Equity",
+      "sub_category": "Mid Cap",
+      "aum": 85357.9246,
+      "top_5_holdings": [
+        {
+          "company_name": "Max Financial Services Ltd.",
+          "allocation_percent": 4.5
+        },
+        {
+          "company_name": "The Federal Bank Ltd.",
+          "allocation_percent": 3.88
+        },
+        {
+          "company_name": "AU Small Finance Bank Ltd.",
+          "allocation_percent": 3.88
+        },
+        {
+          "company_name": "Indian Bank",
+          "allocation_percent": 3.65
+        },
+        {
+          "company_name": "Ipca Laboratories Ltd.",
+          "allocation_percent": 3.38
+        }
+      ]
+    },
+    "partial_data": false
+  }
+]

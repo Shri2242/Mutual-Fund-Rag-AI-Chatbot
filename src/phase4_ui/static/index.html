@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Groww Mutual Fund Dashboard</title>
+  <meta name="description" content="Facts-only mutual fund assistant. Ask factual questions about HDFC Mutual Fund schemes. No investment advice." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Header / Nav ───────────────────────────────────────────────────────── -->
+  <header class="app-header" id="app-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <!-- Groww-like Icon -->
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="10" fill="#00d09c"/>
+          <path d="M15 10l-4 4-2-2" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="brand-name">Groww</span>
+      </div>
+      <nav class="top-tabs">
+        <a href="#" class="tab active">Mutual funds</a>
+      </nav>
+      <div class="header-actions">
+        <div class="icon-btn" title="Search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        <div class="icon-btn" title="Wallet"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div>
+        <div class="icon-btn" title="Cart"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></div>
+        <div class="icon-btn" title="Notifications"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+        <div class="avatar">
+          <img src="https://ui-avatars.com/api/?name=User&background=333&color=fff" alt="User Avatar" />
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Main ──────────────────────────────────────────────────────────────── -->
+  <main class="app-main" id="main-content">
+    <div class="content-wrapper">
+      
+      <!-- Welcome card (Dashboard Overview) -->
+      <section class="welcome-card" id="welcome-section" aria-label="Welcome">
+        <div class="dashboard-header">
+          <h2>Overall status</h2>
+          <div class="disclaimer-badge">Facts-only · No investment advice</div>
+        </div>
+
+        <div class="portfolio-summary">
+          <div class="total-value">
+            <span class="label">Total schemes</span>
+            <span class="value">5 <span class="currency">HDFC</span></span>
+          </div>
+          <div class="returns">
+            <span class="label">AI Readiness</span>
+            <span class="value text-green">100% indexed</span>
+          </div>
+        </div>
+
+        <!-- Asset Classes Visualization -->
+        <div class="asset-classes">
+          <h3>Asset classes</h3>
+          <div class="chart-container">
+            <div class="donut-chart">
+              <div class="donut-inner">
+                <span class="donut-value">100%</span>
+                <span class="donut-label">Equity</span>
+              </div>
+            </div>
+            <div class="chart-legend">
+              <div class="legend-item">
+                <span class="dot equity"></span>
+                <span class="legend-name">Mutual funds</span>
+                <span class="legend-val">5 Funds</span>
+              </div>
+              <div class="legend-item">
+                <span class="dot stocks"></span>
+                <span class="legend-name">Stocks</span>
+                <span class="legend-val">0</span>
+              </div>
+              <div class="legend-item">
+                <span class="dot sip"></span>
+                <span class="legend-name">SIP</span>
+                <span class="legend-val">0</span>
+              </div>
+              <div class="legend-item">
+                <span class="dot crypto"></span>
+                <span class="legend-name">Crypto</span>
+                <span class="legend-val">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="examples-label">Corpus Assets</div>
+        <div class="asset-list">
+          <!-- Asset Items -->
+          <div class="asset-item chip" data-query="What is the expense ratio of HDFC Mid Cap Opportunities Fund?">
+            <div class="asset-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="asset-details">
+              <div class="asset-name">HDFC Mid Cap Fund</div>
+              <div class="asset-sub">Click to query Expense Ratio</div>
+            </div>
+            <div class="asset-stats text-green">Indexed</div>
+          </div>
+          <div class="asset-item chip" data-query="What is the exit load of HDFC Equity Fund?">
+            <div class="asset-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="asset-details">
+              <div class="asset-name">HDFC Equity Fund</div>
+              <div class="asset-sub">Click to query Exit Load</div>
+            </div>
+            <div class="asset-stats text-green">Indexed</div>
+          </div>
+          <div class="asset-item chip" data-query="What is the lock-in period for HDFC ELSS Tax Saver Fund?">
+            <div class="asset-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="asset-details">
+              <div class="asset-name">HDFC ELSS Tax Saver</div>
+              <div class="asset-sub">Click to query Lock-in Period</div>
+            </div>
+            <div class="asset-stats text-green">Indexed</div>
+          </div>
+          <div class="asset-item chip" data-query="Tell me about HDFC Focused Fund">
+            <div class="asset-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="asset-details">
+              <div class="asset-name">HDFC Focused Fund</div>
+              <div class="asset-sub">Click to query Fund Details</div>
+            </div>
+            <div class="asset-stats text-green">Indexed</div>
+          </div>
+          <div class="asset-item chip" data-query="Tell me about HDFC Large Cap Fund">
+            <div class="asset-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+            <div class="asset-details">
+              <div class="asset-name">HDFC Large Cap Fund</div>
+              <div class="asset-sub">Click to query Fund Details</div>
+            </div>
+            <div class="asset-stats text-green">Indexed</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Conversation area -->
+      <section class="conversation" id="conversation" aria-label="Conversation" aria-live="polite"></section>
+
+      <!-- Answer area (last answer) -->
+      <section class="answer-card hidden" id="answer-card" aria-label="Answer" aria-live="polite">
+        <div class="answer-header">
+          <div class="answer-icon" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <span class="answer-label">AI Assistant</span>
+          <button class="copy-btn" id="copy-btn" title="Copy answer" aria-label="Copy answer to clipboard" type="button">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy
+          </button>
+        </div>
+
+        <div class="answer-body" id="answer-body"></div>
+
+        <footer class="answer-footer" id="answer-footer">
+          <div class="answer-source" id="answer-source"></div>
+          <div class="answer-date" id="answer-date"></div>
+        </footer>
+
+        <div class="intent-tag" id="intent-tag" aria-label="Query classification"></div>
+      </section>
+
+      <!-- Thinking / loading -->
+      <div class="thinking hidden" id="thinking" aria-label="Loading response" aria-live="polite">
+        <div class="thinking-dots" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <span>Analyzing fund data…</span>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ── Input bar ──────────────────────────────────────────────────────────── -->
+  <div class="input-bar" id="input-bar" role="search">
+    <div class="input-wrap">
+      <div class="input-container">
+        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <textarea
+          id="query-input"
+          class="query-input"
+          placeholder="Ask a question about HDFC MF schemes…"
+          rows="1"
+          maxlength="500"
+          autocomplete="off"
+          spellcheck="true"
+          aria-label="Ask a question"
+        ></textarea>
+        <button class="send-btn" id="send-btn" type="button" disabled aria-label="Submit question">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Source status modal ───────────────────────────────────────────────── -->
+  <div class="sources-modal hidden" id="sources-modal" role="dialog" aria-modal="true" aria-label="Source status">
+    <div class="sources-content">
+      <div class="sources-header">
+        <h2>Corpus Freshness</h2>
+        <button class="close-btn" id="close-modal-btn" type="button" aria-label="Close">&#x2715;</button>
+      </div>
+      <div id="sources-list" class="sources-list"></div>
+    </div>
+  </div>
+  <div class="modal-overlay hidden" id="modal-overlay"></div>
+
+  <!-- Floating status button -->
+  <button class="status-fab" id="status-fab" type="button" title="View source freshness" aria-label="View corpus freshness status">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+  </button>
+
+  <script src="app.js"></script>
+</body>
+</html>
