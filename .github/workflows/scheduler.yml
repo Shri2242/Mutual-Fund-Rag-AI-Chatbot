@@ -236,60 +236,6 @@ jobs:
       # ── Job Summary (shown on GitHub Actions run page) ────────────────────
       - name: Write Job Summary
         if: always()
-        run: |
-          OUTCOME="${{ steps.outcome.outputs.outcome }}"
-          DRIFT="${{ steps.outcome.outputs.drift }}"
-          SOFT404="${{ steps.outcome.outputs.soft404 }}"
-          DURATION="${{ steps.outcome.outputs.duration }}"
-          RUN_NUM="${{ github.run_number }}"
-          TRIGGER="${{ github.event_name }}"
-          FORCE="${{ github.event.inputs.force || 'false' }}"
-          TS=$(TZ="Asia/Kolkata" date +"%Y-%m-%d %H:%M:%S IST")
-
-          case "$OUTCOME" in
-            ok)      ICON="✅ OK" ;;
-            partial) ICON="⚠️ PARTIAL" ;;
-            frozen)  ICON="🧊 FROZEN" ;;
-            failed)  ICON="❌ FAILED" ;;
-            *)       ICON="❓ UNKNOWN" ;;
-          esac
-
-          python3 - <<PYEOF
-import os, textwrap
-summary_file = os.environ.get("GITHUB_STEP_SUMMARY", "/dev/stdout")
-outcome  = os.environ.get("OUTCOME",   "unknown")
-drift    = os.environ.get("DRIFT",     "0")
-soft404  = os.environ.get("SOFT404",   "0")
-duration = os.environ.get("DURATION",  "0")
-run_num  = os.environ.get("RUN_NUM",   "?")
-trigger  = os.environ.get("TRIGGER",   "?")
-force    = os.environ.get("FORCE",     "false")
-ts       = os.environ.get("TS",        "?")
-icon     = os.environ.get("ICON",      "?")
-
-md = textwrap.dedent(f"""
-## Mutual Fund Pipeline Run #{run_num} — {icon}
-
-| Field | Value |
-|---|---|
-| Run time (IST) | {ts} |
-| Outcome | **{outcome}** |
-| Drift Count | {drift} |
-| Soft-404s | {soft404} |
-| Duration | {duration}s |
-| Trigger | {trigger} |
-| Force Mode | {force} |
-
-### Outcome Reference
-- **OK**: All 5 URLs fetched and index updated normally
-- **PARTIAL**: Some URLs failed (soft-404); rest were updated
-- **FROZEN**: Drift detected across 2+ URLs; index NOT overwritten (safety gate)
-- **FAILED**: Hard error during pipeline execution
-""")
-
-with open(summary_file, "a", encoding="utf-8") as f:
-    f.write(md)
-PYEOF
         env:
           OUTCOME: ${{ steps.outcome.outputs.outcome }}
           DRIFT: ${{ steps.outcome.outputs.drift }}
@@ -298,6 +244,30 @@ PYEOF
           RUN_NUM: ${{ github.run_number }}
           TRIGGER: ${{ github.event_name }}
           FORCE: ${{ github.event.inputs.force || 'false' }}
+        run: |
+          TS=$(TZ="Asia/Kolkata" date +"%Y-%m-%d %H:%M:%S IST")
+          case "$OUTCOME" in
+            ok)      ICON="OK" ;;
+            partial) ICON="PARTIAL" ;;
+            frozen)  ICON="FROZEN" ;;
+            failed)  ICON="FAILED" ;;
+            *)       ICON="UNKNOWN" ;;
+          esac
+          printf "## Mutual Fund Pipeline Run #%s — %s\n\n" "$RUN_NUM" "$ICON"       >> "$GITHUB_STEP_SUMMARY"
+          printf "| Field | Value |\n"                                                >> "$GITHUB_STEP_SUMMARY"
+          printf "|---|---|\n"                                                         >> "$GITHUB_STEP_SUMMARY"
+          printf "| Run time (IST) | %s |\n" "$TS"                                   >> "$GITHUB_STEP_SUMMARY"
+          printf "| Outcome | **%s** |\n" "$OUTCOME"                                  >> "$GITHUB_STEP_SUMMARY"
+          printf "| Drift Count | %s |\n" "$DRIFT"                                   >> "$GITHUB_STEP_SUMMARY"
+          printf "| Soft-404s | %s |\n" "$SOFT404"                                   >> "$GITHUB_STEP_SUMMARY"
+          printf "| Duration | %ss |\n" "$DURATION"                                  >> "$GITHUB_STEP_SUMMARY"
+          printf "| Trigger | %s |\n" "$TRIGGER"                                     >> "$GITHUB_STEP_SUMMARY"
+          printf "| Force Mode | %s |\n\n" "$FORCE"                                  >> "$GITHUB_STEP_SUMMARY"
+          printf "### Outcome Reference\n"                                             >> "$GITHUB_STEP_SUMMARY"
+          printf "- **OK**: All 5 URLs fetched and index updated normally\n"          >> "$GITHUB_STEP_SUMMARY"
+          printf "- **PARTIAL**: Some URLs failed; rest were updated\n"               >> "$GITHUB_STEP_SUMMARY"
+          printf "- **FROZEN**: Drift across 2+ URLs; index NOT overwritten\n"       >> "$GITHUB_STEP_SUMMARY"
+          printf "- **FAILED**: Hard error during pipeline execution\n"               >> "$GITHUB_STEP_SUMMARY"
 
       # ── Slack alert (only if SLACK_WEBHOOK_URL secret is configured) ──────
       - name: Alert on freeze or failure
