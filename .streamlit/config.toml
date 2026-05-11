@@ -1,10 +1,13 @@
 [server]
 port = 8501
-headless = false
+headless = true
 runOnSave = true
+enableXsrfProtection = false
+enableCORS = false
 
 [browser]
 gatherUsageStats = false
+serverAddress = "localhost"
 
 [theme]
 primaryColor = "#00d09c"
