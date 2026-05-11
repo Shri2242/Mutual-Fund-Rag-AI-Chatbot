@@ -1,0 +1,20 @@
+# ─── Core dependencies for Streamlit deployment ─────────────────────────────
+streamlit>=1.57.0          # Web app framework
+requests>=2.31.0           # HTTP fetching
+beautifulsoup4>=4.12.0     # HTML parsing
+lxml>=5.2.0                # Fast HTML parser
+groq>=0.9.0                # Llama-3 on Groq for facts-only synthesis
+rank_bm25>=0.2.2           # Sparse retrieval fallback
+rapidfuzz>=3.9.0           # Fuzzy scheme name matching
+python-dotenv>=1.0.0       # Load .env for API keys
+
+# ─── Optional (for full pipeline) ────────────────────────────────────────────
+# playwright>=1.43.0       # Headless browser for data collection
+# tiktoken>=0.6.0          # Token counting
+# nltk>=3.8.0              # Sentence tokenization
+# chromadb==0.4.24         # Local vector store
+# openai>=1.30.0           # OpenAI embeddings
+# sentence-transformers>=2.7.0  # Local embeddings
+# anthropic>=0.26.0        # Claude Sonnet
+# fastapi>=0.111.0         # REST API (alternative deployment)
+# uvicorn[standard]>=0.29.0
