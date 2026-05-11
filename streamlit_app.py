@@ -1,10 +1,11 @@
 """
 Streamlit App — Mutual Fund FAQ Assistant
 ==========================================
-A single-file Streamlit deployment that wraps the Phase 3 Orchestrator
-(PII guard + Intent classification + Keyword retrieval + Groq/extractive generation)
-into a professional chatbot UI with a dashboard, source freshness modal,
-and chat history.
+Self-contained deployment. Does NOT import the orchestrator module
+(avoids heavy deps like chromadb, sentence-transformers, torch).
+
+Inlines: PII detector, intent classifier, keyword retriever, Groq/extractive
+generator, and post-processor with URL whitelist enforcement.
 
 Usage:
     streamlit run streamlit_app.py
@@ -14,782 +15,594 @@ import sys
 import os
 import re
 import json
-import hashlib
-import time
-import uuid
 from pathlib import Path
-from datetime import datetime, timezone
 
 import streamlit as st
-
-# ── Ensure project root is on sys.path ────────────────────────────────────────
-ROOT = Path(__file__).parent.resolve()
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 # Load .env
 try:
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env", override=False)
+    load_dotenv(Path(__file__).parent / ".env", override=False)
 except ImportError:
     pass
 
-# ── Import the orchestrator ───────────────────────────────────────────────────
-from src.phase3_reasoning.orchestrator import Orchestrator, PIIDetector, IntentClassifier
-import src.phase3_reasoning.orchestrator as orch_mod
-
 # ─────────────────────────────────────────────────────────────────────────────
-# CONSTANTS
+# INLINED CORE LOGIC
 # ─────────────────────────────────────────────────────────────────────────────
 
-PAGE_TITLE = "Grow RAG — Mutual Fund FAQ Assistant"
-PAGE_ICON = "📈"
-LAYOUT = "wide"
-
+ROOT = Path(__file__).parent.resolve()
+CHUNKS_FILE = ROOT / "src" / "phase2_chunking" / "output" / "chunks.jsonl"
 MANIFEST_PATH = ROOT / "src" / "phase0_corpus_registry" / "corpus_manifest.json"
-REFRESH_LOG   = ROOT / "data" / "index" / "refresh_log.jsonl"
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
+CONFIDENCE_THRESHOLD = 1
 
-SCHEME_META = {
-    "HDFC Mid Cap Opportunities Fund": {
-        "url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
-        "category": "Mid Cap",
-        "slug": "hdfc-mid-cap-fund",
-        "example_q": "What is the expense ratio of HDFC Mid Cap Fund?",
-        "color": "#00d09c",
-    },
-    "HDFC Equity Fund": {
-        "url": "https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth",
-        "category": "Large & Mid Cap",
-        "slug": "hdfc-equity-fund",
-        "example_q": "What is the exit load of HDFC Equity Fund?",
-        "color": "#4781ff",
-    },
-    "HDFC Focused Fund": {
-        "url": "https://groww.in/mutual-funds/hdfc-focused-fund-direct-growth",
-        "category": "Focused / Multi Cap",
-        "slug": "hdfc-focused-fund",
-        "example_q": "Tell me about HDFC Focused Fund",
-        "color": "#a855f7",
-    },
-    "HDFC ELSS Tax Saver Fund": {
-        "url": "https://groww.in/mutual-funds/hdfc-elss-tax-saver-fund-direct-plan-growth",
-        "category": "ELSS",
-        "slug": "hdfc-elss",
-        "example_q": "What is the lock-in period for HDFC ELSS Tax Saver Fund?",
-        "color": "#eb5b3c",
-    },
-    "HDFC Large Cap Fund": {
-        "url": "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
-        "category": "Large Cap",
-        "slug": "hdfc-large-cap-fund",
-        "example_q": "Tell me about HDFC Large Cap Fund",
-        "color": "#f59e0b",
-    },
+ALLOWED_URLS = [
+    "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-equity-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-focused-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-elss-tax-saver-fund-direct-plan-growth",
+    "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
+]
+
+PII_BLOCK = (
+    "Your message contains potentially sensitive personal information. "
+    "For your security, this query has been blocked. "
+    "We will never ask for your PAN, Aadhaar, OTP, or account details."
+)
+DONT_KNOW = (
+    "This information is not available in our current source corpus. "
+    "Please name the specific HDFC scheme you are asking about and try again."
+)
+REFUSAL = (
+    "As a facts-only assistant, I cannot provide investment advice, "
+    "fund comparisons, or return predictions. "
+    "Please consult a SEBI-registered financial advisor."
+)
+SAFE_TEMPLATE = (
+    "I'm sorry, I encountered an error verifying my response. "
+    "Please check the official Groww page for accurate details."
+)
+
+BANNED_TOKENS = [
+    "recommend", "should invest", "better than",
+    "will outperform", "guaranteed", "best fund",
+]
+
+PII_PATTERNS = [
+    r"[A-Z]{5}[0-9]{4}[A-Z]{1}",
+    r"\b\d{4}\s?\d{4}\s?\d{4}\b",
+    r"\b[6-9]\d{9}\b",
+    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,7}\b",
+]
+
+FUND_ALIAS_MAP = {
+    "hdfc-equity-fund":      ["equity", "flexi", "flexicap", "flexi cap"],
+    "hdfc-mid-cap-fund":     ["mid cap", "midcap", "mid-cap", "opportunities"],
+    "hdfc-focused-fund":     ["focused"],
+    "hdfc-elss":             ["elss", "tax saver", "tax-saver", "lock"],
+    "hdfc-large-cap-fund":   ["large cap", "largecap", "large-cap"],
 }
 
+QUERY_ALIAS_MAP = {
+    "equity fund":       "mutual-funds_hdfc-equity-fund-direct-growth",
+    "equity":            "mutual-funds_hdfc-equity-fund-direct-growth",
+    "flexi cap":         "mutual-funds_hdfc-equity-fund-direct-growth",
+    "flexicap":          "mutual-funds_hdfc-equity-fund-direct-growth",
+    "mid cap":           "mutual-funds_hdfc-mid-cap-fund-direct-growth",
+    "midcap":            "mutual-funds_hdfc-mid-cap-fund-direct-growth",
+    "mid-cap":           "mutual-funds_hdfc-mid-cap-fund-direct-growth",
+    "opportunities":     "mutual-funds_hdfc-mid-cap-fund-direct-growth",
+    "focused":           "mutual-funds_hdfc-focused-fund-direct-growth",
+    "elss":              "mutual-funds_hdfc-elss-tax-saver-fund-direct-plan-growth",
+    "tax saver":         "mutual-funds_hdfc-elss-tax-saver-fund-direct-plan-growth",
+    "tax-saver":         "mutual-funds_hdfc-elss-tax-saver-fund-direct-plan-growth",
+    "large cap":         "mutual-funds_hdfc-large-cap-fund-direct-growth",
+    "largecap":          "mutual-funds_hdfc-large-cap-fund-direct-growth",
+    "large-cap":         "mutual-funds_hdfc-large-cap-fund-direct-growth",
+}
+
+FIELD_MAP = [
+    (["riskometer", "risk level", "risk rating", "risk class"], "risk level is rated"),
+    (["expense ratio", "ter", "total expense"],                  "Expense Ratio"),
+    (["exit load", "redemption charge", "exit charge"],          "Exit Load"),
+    (["nav", "net asset value", "current price"],                "NAV"),
+    (["aum", "assets under management", "fund size"],           "Assets Under Management"),
+    (["sip", "minimum sip", "minimum investment"],              "minimum SIP"),
+    (["benchmark", "benchmark index"],                          "benchmark index"),
+    (["fund manager", "who manages", "managed by"],             "fund manager"),
+    (["lock-in", "lock in", "elss lock", "3 year"],             "lock-in period"),
+    (["holding", "portfolio", "top stock", "allocation"],       "Top holdings"),
+]
+
+
+def contains_pii(text):
+    return any(re.search(p, text) for p in PII_PATTERNS)
+
+
+def classify_intent(query):
+    q = query.lower()
+    advisory = ["should i", "recommend", "better", "invest in", "good investment", "which fund"]
+    prediction = ["will it", "future return", "forecast", "grow", "expected return"]
+    comparison = [" vs ", "compare", "difference between", "which is better"]
+    if any(kw in q for kw in advisory):
+        return "advisory"
+    if any(kw in q for kw in prediction):
+        return "prediction"
+    if any(kw in q for kw in comparison):
+        return "comparison"
+    return "factual"
+
+
+def load_chunks():
+    chunks = []
+    if CHUNKS_FILE.exists():
+        with open(CHUNKS_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    chunks.append(json.loads(line))
+    return chunks
+
+
+def _get_searchable(chunk):
+    slug = chunk.get("chunk_id", "").replace("-", " ").replace("_", " ")
+    scheme = chunk.get("metadata", {}).get("scheme", "")
+    text = chunk.get("text", "")
+    alias_tokens = ""
+    for slug_key, tokens in FUND_ALIAS_MAP.items():
+        if slug_key in chunk.get("chunk_id", ""):
+            alias_tokens = " ".join(tokens)
+            break
+    return f"{slug} {scheme} {alias_tokens} {text}".lower()
+
+
+def retrieve(chunks, query):
+    q_lower = query.lower()
+    q_terms = q_lower.split()
+    # Alias shortcut
+    for phrase in sorted(QUERY_ALIAS_MAP.keys(), key=len, reverse=True):
+        if phrase in q_lower:
+            target_id = QUERY_ALIAS_MAP[phrase]
+            for chunk in chunks:
+                if chunk.get("chunk_id") == target_id:
+                    score = max(3, sum(1 for t in q_terms if t in _get_searchable(chunk)))
+                    return chunk, score
+    # Keyword scoring
+    best_chunk, best_score = None, 0
+    for chunk in chunks:
+        searchable = _get_searchable(chunk)
+        score = sum(1 for t in q_terms if t in searchable)
+        if score > best_score:
+            best_score, best_chunk = score, chunk
+    return best_chunk, best_score
+
+
+def extractive_generate(text, query):
+    text = re.sub(r"https?://\S+", "", text).strip()
+    q_lower = query.lower()
+    matched = []
+    for keywords, fragment in FIELD_MAP:
+        if any(kw in q_lower for kw in keywords):
+            matched.append(fragment.lower())
+    if not matched:
+        return text
+    sentences = text.split(". ")
+    relevant = []
+    if sentences:
+        relevant.append(sentences[0])
+    for sentence in sentences[1:]:
+        s_lower = sentence.lower()
+        if any(frag in s_lower for frag in matched):
+            relevant.append(sentence)
+    return ". ".join(relevant) + ("." if relevant and not relevant[-1].endswith(".") else "")
+
+
+def groq_generate(chunk_text, query, history=None):
+    if not GROQ_API_KEY:
+        return None
+    try:
+        import httpx
+
+        hist_text = ""
+        if history:
+            hist_text = (
+                "RECENT HISTORY:\n"
+                + "\n".join(
+                    [f"{h['role'].upper()}: {h['content']}" for h in history[-2:]]
+                )
+            )
+
+        system_prompt = (
+            "You are a professional, facts-only mutual fund information assistant.\n"
+            "Rules:\n"
+            "1. Answer ONLY from the provided context. Do NOT use prior knowledge.\n"
+            "2. CONCISE MODE: If the user asks for a specific metric, return ONLY:\n"
+            "   Fund: <fund_name>\n"
+            "   <Metric>: <value>\n"
+            "   Date: <as_of_date>\n"
+            "3. If the user asks a general question, provide a brief summary.\n"
+            "4. HISTORY: Use provided chat history to resolve pronouns.\n"
+            "5. Do NOT include any URLs or links.\n"
+            "6. Do NOT provide investment advice.\n"
+            "7. If the context is insufficient, reply ONLY with: DONT_KNOW\n"
+        )
+
+        resp = httpx.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": GROQ_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {
+                        "role": "user",
+                        "content": f"{hist_text}\n\nCONTEXT:\n{chunk_text}\n\nUSER QUERY:\n{query}",
+                    },
+                ],
+                "temperature": 0.0,
+                "max_tokens": 256,
+            },
+            timeout=30,
+        )
+        if resp.status_code == 200:
+            body = resp.json()["choices"][0]["message"]["content"].strip()
+            if "DONT_KNOW" in body or not body:
+                return None
+            return re.sub(r"https?://\S+", "", body).strip()
+    except Exception as e:
+        print(f"[Groq] call failed: {e}")
+    return None
+
+
+def answer_query(query, chunks, history=None):
+    """Full pipeline: PII -> Intent -> Retrieve -> Generate -> Post-process."""
+    if contains_pii(query):
+        return PII_BLOCK
+
+    intent = classify_intent(query)
+    if intent != "factual":
+        chunk, _ = retrieve(chunks, query)
+        ref_url = chunk["metadata"]["source_url"] if chunk else ALLOWED_URLS[0]
+        return f"{REFUSAL}\n\nFor more information: {ref_url}"
+
+    # History resolution
+    processed_query = query
+    if history and any(
+        kw in query.lower() for kw in ["it", "its", "that fund", "this fund", "the fund"]
+    ):
+        for turn in reversed(history):
+            if turn["role"] == "assistant" and "Fund:" in turn["content"]:
+                last_fund = turn["content"].split("Fund:")[1].split("\n")[0].strip()
+                processed_query = f"{query} ({last_fund})"
+                break
+
+    # Retrieve
+    chunk, score = retrieve(chunks, processed_query)
+    if score < CONFIDENCE_THRESHOLD and processed_query != query:
+        chunk2, score2 = retrieve(chunks, query)
+        if score2 > score:
+            chunk, score = chunk2, score2
+
+    if not chunk or score < CONFIDENCE_THRESHOLD:
+        return DONT_KNOW
+
+    # Generate
+    text = chunk["text"]
+    url = chunk["metadata"].get("source_url", "")
+    fetch_date = chunk["metadata"].get("fetch_date", "N/A")
+
+    body = groq_generate(text, query, history)
+    if body is None:
+        body = extractive_generate(text, query)
+
+    if not body:
+        return DONT_KNOW
+
+    # Post-process
+    if contains_pii(body) or any(b in body.lower() for b in BANNED_TOKENS):
+        return SAFE_TEMPLATE
+    if url not in ALLOWED_URLS:
+        return SAFE_TEMPLATE
+
+    draft = f"{body}\n\nSource: {url}\nLast updated from sources: {fetch_date}"
+    if len(re.findall(r"https?://", draft)) != 1:
+        return SAFE_TEMPLATE
+    return draft
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# PAGE CONFIG
+# STREAMLIT APP
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title=PAGE_TITLE,
-    page_icon=PAGE_ICON,
-    layout=LAYOUT,
+    page_title="Grow RAG — Mutual Fund FAQ Assistant",
+    page_icon="📈",
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CUSTOM CSS
-# ─────────────────────────────────────────────────────────────────────────────
-
 CUSTOM_CSS = """
 <style>
-    /* ── Global theme ── */
     :root {
-        --bg: #121212;
-        --bg-card: #1E1E1E;
-        --bg-hover: #2C2C2C;
-        --border: #333333;
-        --text-primary: #FFFFFF;
-        --text-secondary: #B3B3B3;
-        --text-muted: #808080;
-        --accent: #00d09c;
-        --accent-light: #33d9b0;
-        --red: #eb5b3c;
-        --blue: #4781ff;
-        --radius: 12px;
+        --bg: #121212; --bg-card: #1E1E1E; --bg-hover: #2C2C2C;
+        --border: #333333; --text-primary: #FFFFFF; --text-secondary: #B3B3B3;
+        --text-muted: #808080; --accent: #00d09c; --red: #eb5b3c;
+        --blue: #4781ff; --radius: 12px;
     }
-
-    /* Override Streamlit defaults */
-    .stApp {
-        background: var(--bg);
-        color: var(--text-primary);
-    }
-    
-    .stAppHeader, .stAppToolbar, .st-emotion-cache-1dp5vir, .st-emotion-cache-1wrcr25 {
-        background: var(--bg) !important;
-    }
-    
-    .stSidebar {
-        background: var(--bg-card) !important;
-        border-right: 1px solid var(--border) !important;
-    }
-    
-    .stSidebar .st-emotion-cache-1wmy9hl {
-        background: var(--bg-card) !important;
-    }
-
-    /* Main chat container */
-    .chat-container {
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 0 16px;
-    }
-    
-    /* Message bubbles */
+    .stApp { background: var(--bg) !important; }
+    .stSidebar { background: var(--bg-card) !important; border-right: 1px solid var(--border) !important; }
     .user-message {
-        background: var(--bg-hover);
-        color: #fff;
-        padding: 12px 18px;
-        border-radius: 18px 18px 4px 18px;
-        margin: 8px 0 8px auto;
-        max-width: 80%;
-        width: fit-content;
-        font-size: 15px;
-        line-height: 1.5;
-        border: 1px solid var(--border);
-        animation: fadeIn 0.3s ease;
+        background: var(--bg-hover); color: #fff; padding: 12px 18px;
+        border-radius: 18px 18px 4px 18px; margin: 8px 0 8px auto;
+        max-width: 80%; width: fit-content; font-size: 15px;
+        border: 1px solid var(--border); animation: fadeIn 0.3s ease;
     }
-    
     .ai-message {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 18px 20px;
-        margin: 8px 0;
+        background: var(--bg-card); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 18px 20px; margin: 8px 0;
         animation: fadeIn 0.3s ease;
     }
-    
-    .ai-message.refusal {
-        border-color: rgba(235,91,60,0.4);
-    }
-    
-    .ai-message.pii {
-        border-color: var(--red);
-    }
-
+    .ai-message.refusal { border-color: rgba(235,91,60,0.4); }
+    .ai-message.pii { border-color: var(--red); }
     .ai-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+        padding-bottom: 10px; border-bottom: 1px solid var(--border);
     }
-    
     .ai-avatar {
-        width: 28px;
-        height: 28px;
-        border-radius: 50%;
-        background: var(--accent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-        color: var(--bg);
-        font-weight: bold;
+        width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px; color: var(--bg); font-weight: bold;
     }
-    
-    .ai-label {
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--text-primary);
-        flex: 1;
-    }
-    
+    .ai-label { font-size: 14px; font-weight: 600; color: var(--text-primary); flex: 1; }
     .intent-badge {
-        font-size: 11px;
-        font-weight: 600;
-        padding: 3px 10px;
-        border-radius: 4px;
+        font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 4px;
     }
-    
     .intent-badge.factual { background: rgba(0,208,156,0.15); color: var(--accent); }
     .intent-badge.advisory { background: rgba(235,91,60,0.15); color: var(--red); }
     .intent-badge.pii { background: rgba(239,68,68,0.1); color: var(--red); }
     .intent-badge.dont_know { background: rgba(71,129,255,0.1); color: var(--blue); }
-    
-    .ai-body {
-        font-size: 15px;
-        line-height: 1.65;
-        color: var(--text-primary);
-        white-space: pre-wrap;
-    }
-    
-    .ai-footer {
-        margin-top: 14px;
-        padding-top: 12px;
-        border-top: 1px solid var(--border);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        align-items: center;
-        font-size: 13px;
-    }
-    
-    .ai-source a {
-        color: var(--accent);
-        text-decoration: none;
-    }
-    
-    .ai-source a:hover { text-decoration: underline; }
-    
-    .ai-date {
-        color: var(--text-muted);
-    }
-
-    /* Source section in messages */
-    .source-block {
-        margin-top: 12px;
-        padding: 12px 14px;
-        background: var(--bg-hover);
-        border-radius: 8px;
-        border: 1px solid var(--border-soft, var(--border));
-    }
-    
-    .source-label {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--text-muted);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 6px;
-        display: block;
-    }
-    
-    .source-link {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 13px;
-        color: var(--accent);
-        text-decoration: none;
-        padding: 4px 0;
-    }
-    
-    .source-footer {
-        font-size: 12px;
-        color: var(--accent);
-        margin-top: 6px;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-    }
-    
-    /* Error messages */
-    .error-message {
-        background: var(--bg-card);
-        border: 1px solid var(--red);
-        border-radius: var(--radius);
-        padding: 14px 18px;
-        margin: 8px 0;
-        color: var(--red);
-        animation: fadeIn 0.3s ease;
-    }
-    
-    .error-message .error-title {
-        font-weight: 600;
-        font-size: 14px;
-        margin-bottom: 4px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
-    /* Dashboard cards */
-    .scheme-card {
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 16px;
-        margin-bottom: 10px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    
-    .scheme-card:hover {
-        border-color: var(--accent);
-        background: var(--bg-hover);
-    }
-    
-    .scheme-card .scheme-name {
-        font-size: 15px;
-        font-weight: 600;
-        margin-bottom: 6px;
-    }
-    
-    .scheme-card .scheme-category {
-        font-size: 13px;
-        color: var(--text-secondary);
-    }
-    
-    .scheme-status {
-        font-size: 12px;
-        color: var(--accent);
-        margin-top: 6px;
-    }
-
-    /* Welcome banner */
-    .welcome-banner {
-        text-align: center;
-        padding: 40px 20px;
-    }
-    
+    .ai-body { font-size: 15px; line-height: 1.65; color: var(--text-primary); white-space: pre-wrap; }
+    .ai-footer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; gap: 12px; font-size: 13px; color: var(--text-muted); }
+    .source-block { margin-top: 12px; padding: 12px 14px; background: var(--bg-hover); border-radius: 8px; }
+    .source-label { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; display: block; }
+    .source-link { font-size: 13px; color: var(--accent); text-decoration: none; }
+    .scheme-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 10px; }
+    .scheme-card .scheme-name { font-size: 15px; font-weight: 600; }
+    .scheme-card .scheme-category { font-size: 13px; color: var(--text-secondary); }
+    .welcome-banner { text-align: center; padding: 40px 20px; }
     .welcome-banner h1 {
-        font-size: 32px;
-        font-weight: 700;
-        margin-bottom: 8px;
-        background: linear-gradient(135deg, var(--accent), var(--accent-light));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+        font-size: 32px; font-weight: 700;
+        background: linear-gradient(135deg, var(--accent), #33d9b0);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text; margin-bottom: 8px;
     }
-    
-    .welcome-banner p {
-        color: var(--text-secondary);
-        font-size: 16px;
-        max-width: 500px;
-        margin: 0 auto 16px;
-    }
-    
+    .welcome-banner p { color: var(--text-secondary); font-size: 16px; margin: 0 auto 16px; }
     .welcome-banner .pill {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: rgba(0,208,156,0.1);
-        border: 1px solid rgba(0,208,156,0.3);
-        padding: 8px 16px;
-        border-radius: 20px;
-        font-size: 13px;
-        color: var(--accent);
+        display: inline-flex; background: rgba(0,208,156,0.1);
+        border: 1px solid rgba(0,208,156,0.3); padding: 8px 16px;
+        border-radius: 20px; font-size: 13px; color: var(--accent);
     }
-
-    /* Chat input styling */
     [data-testid="stChatInput"] textarea {
-        background: var(--bg-card) !important;
-        border: 1px solid var(--border) !important;
-        border-radius: 24px !important;
-        color: var(--text-primary) !important;
+        background: var(--bg-card) !important; border: 1px solid var(--border) !important;
+        border-radius: 24px !important; color: var(--text-primary) !important;
         font-size: 15px !important;
-        padding: 12px 20px !important;
     }
-    
-    [data-testid="stChatInput"] textarea:focus {
-        border-color: var(--accent) !important;
-    }
-    
     [data-testid="stChatInput"] button {
-        background: var(--accent) !important;
-        color: var(--bg) !important;
+        background: var(--accent) !important; color: var(--bg) !important;
         border-radius: 50% !important;
-        width: 40px !important;
-        height: 40px !important;
     }
-
-    /* Sidebar elements */
-    .sidebar-logo {
-        padding: 16px 20px;
-        border-bottom: 1px solid var(--border);
-        margin-bottom: 16px;
-    }
-    
+    .sidebar-logo { padding: 16px 20px; border-bottom: 1px solid var(--border); }
     .sidebar-logo h2 {
-        font-size: 22px;
-        font-weight: 700;
-        background: linear-gradient(135deg, var(--accent), var(--accent-light));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin: 0;
+        font-size: 22px; font-weight: 700;
+        background: linear-gradient(135deg, var(--accent), #33d9b0);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text; margin: 0;
     }
-    
-    .sidebar-logo span {
-        font-size: 12px;
-        color: var(--text-secondary);
-    }
-    
-    .example-item {
-        padding: 10px 14px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: 13px;
-        color: var(--text-secondary);
-        transition: all 0.2s;
-        border: 1px solid transparent;
-        margin-bottom: 6px;
-    }
-    
-    .example-item:hover {
-        background: var(--bg-hover);
-        border-color: var(--border);
-        color: var(--text-primary);
-    }
-    
-    /* Metrics */
-    [data-testid="stMetricValue"] {
-        color: var(--text-primary) !important;
-    }
-    
-    [data-testid="stMetricLabel"] {
-        color: var(--text-secondary) !important;
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(8px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    /* Divider */
-    hr {
-        border-color: var(--border) !important;
-        margin: 16px 0 !important;
-    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 """
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPER FUNCTIONS
-# ─────────────────────────────────────────────────────────────────────────────
+SCHEME_META = [
+    ("HDFC Mid Cap Opportunities Fund", "Mid Cap", "What is the expense ratio of HDFC Mid Cap Fund?"),
+    ("HDFC Equity Fund", "Large & Mid Cap", "What is the exit load of HDFC Equity Fund?"),
+    ("HDFC Focused Fund", "Focused / Multi Cap", "Tell me about HDFC Focused Fund"),
+    ("HDFC ELSS Tax Saver Fund", "ELSS", "What is the lock-in period for HDFC ELSS Tax Saver Fund?"),
+    ("HDFC Large Cap Fund", "Large Cap", "Tell me about HDFC Large Cap Fund"),
+]
 
-def get_intent_label(intent: str) -> dict:
-    """Return (display_label, css_class) for an intent type."""
-    labels = {
-        "factual":      ("Factual Answer", "factual"),
-        "advisory":     ("Advisory Refusal", "advisory"),
-        "comparison":   ("Comparison Refusal", "advisory"),
-        "prediction":   ("Prediction Refusal", "advisory"),
-        "pii_blocked":  ("PII Blocked", "pii"),
-        "dont_know":    ("Not in Corpus", "dont_know"),
-    }
-    return labels.get(intent, (intent, "factual"))
+QUICK_QUERIES = [
+    "What is NAV of HDFC Mid Cap Fund?",
+    "What is expense ratio of HDFC ELSS Tax Saver Fund?",
+    "Tell me about HDFC Large Cap Fund",
+]
 
 
-def load_manifest_meta() -> dict:
-    """Load corpus manifest metadata for the sidebar/dashboard."""
+def load_manifest():
     if not MANIFEST_PATH.exists():
-        return {"total_schemes": 5, "last_ingested": "N/A", "corpus_version": "v1", "schemes": []}
-    
-    with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
-        manifest = json.load(f)
-    
+        return {"total_schemes": 5, "last_ingested": "N/A", "amc": "HDFC Mutual Fund", "schemes": []}
+    with open(MANIFEST_PATH, "r") as f:
+        m = json.load(f)
     schemes = []
-    for entry in manifest.get("corpus_urls", []):
-        schemes.append({
-            "scheme": entry.get("scheme", "?"),
-            "category": entry.get("category", "?"),
-            "url": entry.get("url", ""),
-            "status": entry.get("status", "unknown"),
-            "last_updated": entry.get("last_updated_from_source", ""),
-        })
-    
+    for e in m.get("corpus_urls", []):
+        schemes.append({"scheme": e.get("scheme", "?"), "category": e.get("category", "?")})
     return {
-        "total_schemes": manifest.get("total_urls", 5),
-        "last_ingested": manifest.get("last_ingested", "N/A"),
-        "corpus_version": manifest.get("corpus_version", "v1"),
-        "amc": manifest.get("amc", "HDFC Mutual Fund"),
+        "total_schemes": m.get("total_urls", 5),
+        "last_ingested": m.get("last_ingested", "N/A"),
+        "amc": m.get("amc", "HDFC"),
         "schemes": schemes,
     }
 
 
-def init_orchestrator():
-    """Initialize or retrieve the cached Orchestrator singleton."""
-    if "orchestrator" not in st.session_state:
-        st.session_state.orchestrator = Orchestrator()
-    return st.session_state.orchestrator
-
-
-def init_chat_history():
-    """Ensure chat history exists in session state."""
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "orch_history" not in st.session_state:
-        st.session_state.orch_history = []
-    if "conversation_started" not in st.session_state:
-        st.session_state.conversation_started = False
-
-
-def ask_question(query: str):
-    """
-    Send a query to the orchestrator, render the response, and update history.
-    """
-    orch = init_orchestrator()
-    
-    # Add user message to Streamlit history
-    st.session_state.messages.append({"role": "user", "content": query})
-    st.session_state.conversation_started = True
-    
-    # Build orchestrator history (last 4 turns max)
-    orch_hist = st.session_state.orch_history[-4:] if st.session_state.orch_history else []
-    
-    # Call orchestrator
-    try:
-        raw_answer = orch.ask(query, history=orch_hist)
-        
-        # Parse the answer
-        parsed = _parse_answer(raw_answer)
-        url_count = len(re.findall(r"https?://", raw_answer))
-        
-        # Detect intent
-        is_pii = PIIDetector.contains_pii(query)
-        intent = "pii_blocked" if is_pii else IntentClassifier.classify(query)
-        
-        response_data = {
-            "answer": raw_answer,
-            "answer_body": parsed["body"],
-            "source_url": parsed["source_url"],
-            "last_updated": parsed["last_updated"],
-            "intent": intent,
-            "url_count": url_count,
-        }
-        
-        # Update orchestrator history
-        st.session_state.orch_history.append({"role": "user", "content": query})
-        st.session_state.orch_history.append({"role": "assistant", "content": raw_answer})
-        
-    except Exception as e:
-        response_data = {
-            "answer": f"Error: {str(e)}",
-            "answer_body": f"Something went wrong: {str(e)}",
-            "source_url": None,
-            "last_updated": None,
-            "intent": "error",
-            "url_count": 0,
-        }
-    
-    st.session_state.messages.append({"role": "assistant", "data": response_data})
-
-
-def _parse_answer(raw: str) -> dict:
-    """Split the orchestrator's raw reply into body, source_url, last_updated."""
-    source_url = None
-    last_updated = None
+def parse_answer(raw):
+    src = re.search(r"Source:\s*(https?://\S+)", raw)
+    dt = re.search(r"Last updated from sources:\s*(\S+)", raw)
+    edu = re.search(r"For more information:\s*(https?://\S+)", raw)
     body = raw
-
-    src_match = re.search(r"Source:\s*(https?://\S+)", raw)
-    if src_match:
-        source_url = src_match.group(1).strip()
-        body = body.replace(f"Source: {source_url}", "").strip()
-
-    date_match = re.search(r"Last updated from sources:\s*(\S+)", raw)
-    if date_match:
-        last_updated = date_match.group(1).strip()
-        body = body.replace(f"Last updated from sources: {last_updated}", "").strip()
-
-    edu_match = re.search(r"For more information:\s*(https?://\S+)", raw)
-    if edu_match and not source_url:
-        source_url = edu_match.group(1).strip()
-        body = body.replace(f"For more information: {source_url}", "").strip()
-
-    return {"body": body.strip(), "source_url": source_url, "last_updated": last_updated}
+    source_url = None
+    if src:
+        source_url = src.group(1)
+        body = body.replace(f"Source: {source_url}", "")
+    last_updated = None
+    if dt:
+        last_updated = dt.group(1)
+        body = body.replace(f"Last updated from sources: {last_updated}", "")
+    if edu and not source_url:
+        source_url = edu.group(1)
+        body = body.replace(f"For more information: {source_url}", "")
+    return body.strip(), source_url, last_updated
 
 
-def render_ai_message(data: dict):
-    """Render an AI message using HTML with source attribution."""
-    body = data.get("answer_body", data.get("answer", ""))
-    source_url = data.get("source_url")
-    last_updated = data.get("last_updated")
-    intent = data.get("intent", "factual")
-    
-    label, cls = get_intent_label(intent)
-    
-    css_cls = "ai-message"
-    if intent in ("advisory", "comparison", "prediction"):
-        css_cls += " refusal"
-    if intent == "pii_blocked":
-        css_cls += " pii"
-    
-    source_html = ""
-    if source_url:
-        source_html = f"""
-        <div class="source-block">
-            <span class="source-label">Source</span>
-            <a href="{source_url}" target="_blank" rel="noopener noreferrer" class="source-link">
-                🔗 {source_url.replace('https://', '')}
-            </a>
-            <div class="source-footer">✅ Verified from official source</div>
-        </div>
-        """
-    
-    date_html = f'<span class="ai-date">📅 Last updated: {last_updated}</span>' if last_updated else ""
-    
-    html = f"""
-    <div class="{css_cls}">
-        <div class="ai-header">
-            <div class="ai-avatar">AI</div>
-            <span class="ai-label">AI Assistant</span>
-            <span class="intent-badge {cls}">{label}</span>
-        </div>
-        <div class="ai-body">{body.replace(chr(10), '<br>')}</div>
-        {source_html}
-        <div class="ai-footer">
-            {date_html}
-        </div>
-    </div>
-    """
-    
-    st.markdown(html, unsafe_allow_html=True)
+def get_intent_label(intent):
+    labels = {
+        "factual": ("Factual Answer", "factual"),
+        "advisory": ("Advisory Refusal", "advisory"),
+        "comparison": ("Comparison Refusal", "advisory"),
+        "prediction": ("Prediction Refusal", "advisory"),
+        "pii_blocked": ("PII Blocked", "pii"),
+        "dont_know": ("Not in Corpus", "dont_know"),
+    }
+    return labels.get(intent, (intent.replace("_", " ").title(), "factual"))
 
 
-def render_user_message(content: str):
-    """Render a user message bubble."""
-    st.markdown(f'<div class="user-message">{content}</div>', unsafe_allow_html=True)
+# ── Session state ────────────────────────────────────────────────────────────
 
-
-def clear_chat():
-    """Clear the chat history."""
+if "messages" not in st.session_state:
     st.session_state.messages = []
-    st.session_state.orch_history = []
+    st.session_state.orch_hist = []
     st.session_state.conversation_started = False
+if "chunks" not in st.session_state:
+    st.session_state.chunks = load_chunks()
 
 
-def handle_example_click(query: str):
-    """Handle clicking an example question."""
-    st.session_state.pending_query = query
+# ── Layout ───────────────────────────────────────────────────────────────────
 
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+manifest = load_manifest()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MAIN APP
-# ─────────────────────────────────────────────────────────────────────────────
+# Sidebar
+with st.sidebar:
+    st.markdown('<div class="sidebar-logo"><h2>📊 Grow RAG</h2></div>', unsafe_allow_html=True)
 
-def main():
-    # Inject custom CSS
-    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-    
-    # Initialize state
-    init_chat_history()
-    init_orchestrator()
-    manifest_meta = load_manifest_meta()
-    
-    # ── Sidebar ──────────────────────────────────────────────────────────────
-    with st.sidebar:
-        st.markdown(
-            f"""
-            <div class="sidebar-logo">
-                <h2>📊 Grow RAG</h2>
-                <span>Professional Finance Assistant</span>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # Clear chat button
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            st.button("🗑️", help="Clear chat", on_click=clear_chat, use_container_width=True)
-        with col2:
-            if st.button("✦ New Chat", use_container_width=True, type="secondary"):
-                clear_chat()
-        
-        st.divider()
-        
-        # Corpus Status
-        st.markdown("#### 📚 Corpus Status")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Schemes", manifest_meta["total_schemes"])
-        with col2:
-            st.metric("AMC", "HDFC")
-        
-        ingested = manifest_meta.get("last_ingested", "N/A")
-        if ingested != "N/A" and len(ingested) > 10:
-            ingested = ingested[:10]
-        st.caption(f"Last ingested: {ingested}")
-        
-        st.divider()
-        
-        # Example questions
-        st.markdown("#### 💡 Example Questions")
-        st.markdown('<div class="example-list">', unsafe_allow_html=True)
-        
-        for name, meta in SCHEME_META.items():
-            if st.button(
-                f"💬 {meta['example_q']}",
-                key=f"ex_{meta['slug']}",
-                use_container_width=True,
-                type="tertiary",
-            ):
-                st.session_state.pending_query = meta["example_q"]
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.divider()
-        
-        # Schemes overview
-        st.markdown("#### 📋 Indexed Schemes")
-        for scheme in manifest_meta.get("schemes", []):
-            st.markdown(
-                f"""<div class="scheme-card">
-                    <div class="scheme-name">{scheme['scheme']}</div>
-                    <div class="scheme-category">{scheme['category']}</div>
-                    <div class="scheme-status">✅ Indexed</div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-        
-        st.divider()
-        st.caption("⚠️ Facts-only. No investment advice.")
-    
-    # ── Main Chat Area ───────────────────────────────────────────────────────
-    
-    # Welcome banner (shown before first message)
-    if not st.session_state.conversation_started and not st.session_state.messages:
-        st.markdown(
-            """
-            <div class="welcome-banner">
-                <h1>Grow RAG</h1>
-                <p>Instantly query verified documents for listed HDFC schemes. 
-                I synthesize complex financial data into concise, accurate answers.</p>
-                <div class="pill">🛡️ Facts-only. No investment advice.</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        
-        # Quick action chips
-        st.markdown("#### Quick Queries")
-        cols = st.columns(3)
-        example_queries = [
-            "What is the expense ratio of HDFC Mid Cap Fund?",
-            "What is the exit load of HDFC Equity Fund?",
-            "What is the lock-in period for HDFC ELSS Tax Saver?",
-        ]
-        for i, (col, q) in enumerate(zip(cols, example_queries)):
-            with col:
-                if st.button(q, use_container_width=True, type="secondary"):
-                    st.session_state.pending_query = q
-    
-    # Render chat history
-    chat_container = st.container()
-    with chat_container:
-        for msg in st.session_state.messages:
-            if msg["role"] == "user":
-                render_user_message(msg["content"])
-            elif msg["role"] == "assistant" and "data" in msg:
-                render_ai_message(msg["data"])
-    
-    # Handle pending query (from example button clicks)
-    if "pending_query" in st.session_state and st.session_state.pending_query:
-        query = st.session_state.pending_query
-        st.session_state.pending_query = None
-        ask_question(query)
+    if st.button("✦ New Chat", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.orch_hist = []
+        st.session_state.conversation_started = False
         st.rerun()
-    
-    # Chat input
+
     st.divider()
-    if prompt := st.chat_input("Ask a factual question about listed HDFC schemes...", key="chat_input"):
-        ask_question(prompt)
-        st.rerun()
+    st.metric("Schemes Indexed", manifest["total_schemes"])
+    st.caption(f"AMC: {manifest['amc']} | Last ingested: {manifest['last_ingested'][:10]}")
 
+    st.divider()
+    st.markdown("#### 💡 Example Queries")
+    for name, cat, q in SCHEME_META:
+        if st.button(f"💬 {q}", key=f"ex_{name[:20]}", use_container_width=True):
+            st.session_state.pending = q
 
-if __name__ == "__main__":
-    main()
+    st.divider()
+    st.markdown("#### 📋 Indexed Schemes")
+    for s in manifest.get("schemes", []):
+        st.markdown(
+            f'<div class="scheme-card"><div class="scheme-name">{s["scheme"]}</div>'
+            f'<div class="scheme-category">{s["category"]}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.caption("⚠️ Facts-only. No investment advice.")
+
+# Welcome banner
+if not st.session_state.conversation_started and not st.session_state.messages:
+    st.markdown(
+        '<div class="welcome-banner"><h1>Grow RAG</h1>'
+        "<p>Query verified documents for HDFC schemes. "
+        "Concise, accurate, facts-only answers.</p>"
+        '<div class="pill">🛡️ No investment advice</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("#### Quick Queries")
+    cols = st.columns(3)
+    for col, q in zip(cols, QUICK_QUERIES):
+        with col:
+            if st.button(q, use_container_width=True):
+                st.session_state.pending = q
+
+# Render chat
+for msg in st.session_state.messages:
+    if msg["role"] == "user":
+        st.markdown(f'<div class="user-message">{msg["content"]}</div>', unsafe_allow_html=True)
+    else:
+        d = msg["data"]
+        body = d.get("answer_body", d.get("answer", ""))
+        intent = d.get("intent", "factual")
+        label, cls = get_intent_label(intent)
+
+        css = "ai-message"
+        if intent in ("advisory", "comparison", "prediction"):
+            css += " refusal"
+        if intent == "pii_blocked":
+            css += " pii"
+
+        src_html = ""
+        if d.get("source_url"):
+            url_short = d["source_url"].replace("https://", "")
+            src_html = (
+                f'<div class="source-block"><span class="source-label">Source</span>'
+                f'<a class="source-link" href="{d["source_url"]}" target="_blank">🔗 {url_short}</a></div>'
+            )
+
+        date_html = f'📅 Last updated: {d["last_updated"]}' if d.get("last_updated") else ""
+
+        st.markdown(
+            f'<div class="{css}">'
+            f'<div class="ai-header"><div class="ai-avatar">AI</div>'
+            f'<span class="ai-label">AI Assistant</span>'
+            f'<span class="intent-badge {cls}">{label}</span></div>'
+            f'<div class="ai-body">{body.replace(chr(10), "<br>")}</div>'
+            f"{src_html}"
+            f'<div class="ai-footer">{date_html}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+# Handle pending query
+if "pending" in st.session_state and st.session_state.pending:
+    q = st.session_state.pop("pending")
+    st.session_state.messages.append({"role": "user", "content": q})
+    st.session_state.conversation_started = True
+
+    raw = answer_query(q, st.session_state.chunks, st.session_state.orch_hist)
+    b, s, d = parse_answer(raw)
+    intent = "pii_blocked" if contains_pii(q) else classify_intent(q)
+
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "data": {"answer": raw, "answer_body": b, "source_url": s, "last_updated": d, "intent": intent},
+        }
+    )
+    st.session_state.orch_hist.append({"role": "user", "content": q})
+    st.session_state.orch_hist.append({"role": "assistant", "content": raw})
+    st.rerun()
+
+# Chat input
+if prompt := st.chat_input("Ask a factual question about HDFC schemes..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.conversation_started = True
+
+    raw = answer_query(prompt, st.session_state.chunks, st.session_state.orch_hist)
+    b, s, d = parse_answer(raw)
+    intent = "pii_blocked" if contains_pii(prompt) else classify_intent(prompt)
+
+    st.session_state.messages.append(
+        {
+            "role": "assistant",
+            "data": {"answer": raw, "answer_body": b, "source_url": s, "last_updated": d, "intent": intent},
+        }
+    )
+    st.session_state.orch_hist.append({"role": "user", "content": prompt})
+    st.session_state.orch_hist.append({"role": "assistant", "content": raw})
+    st.rerun()

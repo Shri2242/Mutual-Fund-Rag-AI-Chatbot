@@ -1,36 +1,6 @@
-# ─── Phase 0: Corpus Registry ─────────────────────────────────────────────────
-requests>=2.31.0          # URL validation and HTTP fetching
+# ─── Minimal requirements for Streamlit deployment ──────────────────────────
+# No chromadb, sentence-transformers, torch, or playwright (saves ~2GB)
 
-# ─── Phase 1: Data Collection ─────────────────────────────────────────────────
-playwright>=1.43.0        # Headless browser for JS-rendered Groww pages
-beautifulsoup4>=4.12.0    # HTML parsing fallback
-lxml>=5.2.0               # Fast HTML/XML parser for BeautifulSoup
-
-# ─── Phase 2: Preprocessing & Chunking ────────────────────────────────────────
-tiktoken>=0.6.0           # Token counting (OpenAI-compatible)
-nltk>=3.8.0               # Sentence tokenization for semantic chunking
-
-# ─── Phase 3: Embedding & Vector Store ────────────────────────────────────────
-chromadb==0.4.24           # Local vector store (downgraded to avoid VC++ rust bindings error)
-openai>=1.30.0            # text-embedding-3-small
-sentence-transformers>=2.7.0  # Local fallback embedding model (all-MiniLM-L6-v2)
-
-# ─── Phase 4: Query Processing ────────────────────────────────────────────────
-anthropic>=0.26.0         # Claude Sonnet for intent classification + generation
-groq>=0.9.0              # Llama-3 on Groq for facts-only synthesis
-rank_bm25>=0.2.2          # Sparse retrieval fallback
-rapidfuzz>=3.9.0          # Fuzzy scheme name matching
-
-# ─── Phase 5: Response Generation ─────────────────────────────────────────────
-# (uses anthropic and chromadb from above — no additional deps)
-
-# ─── Phase 7: Compliance ──────────────────────────────────────────────────────
-# (uses stdlib re — no additional deps)
-
-# ─── Phase 8: Deployment ──────────────────────────────────────────────────────
-fastapi>=0.111.0          # REST API backend
-uvicorn[standard]>=0.29.0 # ASGI server for FastAPI
-
-# ─── Dev / Testing ────────────────────────────────────────────────────────────
-pytest>=8.2.0             # Test runner
-python-dotenv>=1.0.0      # Load .env for API keys
+streamlit>=1.57.0          # Web app framework
+httpx>=0.28.0              # HTTP client for Groq API calls
+python-dotenv>=1.0.0       # Load .env for API keys
